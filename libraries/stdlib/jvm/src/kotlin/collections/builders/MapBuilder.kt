@@ -50,7 +50,8 @@ internal class MapBuilder<K, V> private constructor(
     fun build(): Map<K, V> {
         checkIsMutable()
         isReadOnly = true
-        return this
+        @Suppress("UNCHECKED_CAST")
+        return if (size > 0) this else (Empty as Map<K, V>)
     }
 
     private fun writeReplace(): Any =
@@ -195,11 +196,10 @@ internal class MapBuilder<K, V> private constructor(
                 && gaps >= this.capacity / 4                // at least 25% of current capacity is occupied by gaps
     }
 
-    private fun ensureCapacity(capacity: Int) {
-        if (capacity < 0) throw OutOfMemoryError()    // overflow
-        if (capacity > this.capacity) {
-            var newSize = this.capacity * 3 / 2
-            if (capacity > newSize) newSize = capacity
+    private fun ensureCapacity(minCapacity: Int) {
+        if (minCapacity < 0) throw OutOfMemoryError()    // overflow
+        if (minCapacity > this.capacity) {
+            val newSize = AbstractList.newCapacity(this.capacity, minCapacity)
             keysArray = keysArray.copyOfUninitializedElements(newSize)
             valuesArray = valuesArray?.copyOfUninitializedElements(newSize)
             presenceArray = presenceArray.copyOf(newSize)
@@ -459,11 +459,13 @@ internal class MapBuilder<K, V> private constructor(
     internal fun valuesIterator() = ValuesItr(this)
     internal fun entriesIterator() = EntriesItr(this)
 
-    private companion object {
+    internal companion object {
         private const val MAGIC = -1640531527 // 2654435769L.toInt(), golden ratio
         private const val INITIAL_CAPACITY = 8
         private const val INITIAL_MAX_PROBE_DISTANCE = 2
         private const val TOMBSTONE = -1
+
+        internal val Empty = MapBuilder<Nothing, Nothing>(0).also { it.isReadOnly = true }
 
         private fun computeHashSize(capacity: Int): Int = (capacity.coerceAtLeast(1) * 3).takeHighestOneBit()
 

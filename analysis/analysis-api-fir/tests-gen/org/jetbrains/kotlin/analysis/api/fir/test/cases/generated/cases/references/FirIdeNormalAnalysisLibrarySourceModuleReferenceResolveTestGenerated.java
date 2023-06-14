@@ -71,6 +71,12 @@ public class FirIdeNormalAnalysisLibrarySourceModuleReferenceResolveTestGenerate
     }
 
     @Test
+    @TestMetadata("AnnotationOnFile2.kt")
+    public void testAnnotationOnFile2() throws Exception {
+        runTest("analysis/analysis-api/testData/referenceResolve/AnnotationOnFile2.kt");
+    }
+
+    @Test
     @TestMetadata("AnnotationOnFileWithImport.kt")
     public void testAnnotationOnFileWithImport() throws Exception {
         runTest("analysis/analysis-api/testData/referenceResolve/AnnotationOnFileWithImport.kt");
@@ -386,6 +392,30 @@ public class FirIdeNormalAnalysisLibrarySourceModuleReferenceResolveTestGenerate
     @TestMetadata("NotEqualsOperator.kt")
     public void testNotEqualsOperator() throws Exception {
         runTest("analysis/analysis-api/testData/referenceResolve/NotEqualsOperator.kt");
+    }
+
+    @Test
+    @TestMetadata("PackageFromAnnotationOnFile.kt")
+    public void testPackageFromAnnotationOnFile() throws Exception {
+        runTest("analysis/analysis-api/testData/referenceResolve/PackageFromAnnotationOnFile.kt");
+    }
+
+    @Test
+    @TestMetadata("PackageFromAnnotationOnFileWithUnresolvedReference.kt")
+    public void testPackageFromAnnotationOnFileWithUnresolvedReference() throws Exception {
+        runTest("analysis/analysis-api/testData/referenceResolve/PackageFromAnnotationOnFileWithUnresolvedReference.kt");
+    }
+
+    @Test
+    @TestMetadata("PackageFromAnnotationOnFunction.kt")
+    public void testPackageFromAnnotationOnFunction() throws Exception {
+        runTest("analysis/analysis-api/testData/referenceResolve/PackageFromAnnotationOnFunction.kt");
+    }
+
+    @Test
+    @TestMetadata("PackageFromAnnotationOnFunctionWithUnresolvedReference.kt")
+    public void testPackageFromAnnotationOnFunctionWithUnresolvedReference() throws Exception {
+        runTest("analysis/analysis-api/testData/referenceResolve/PackageFromAnnotationOnFunctionWithUnresolvedReference.kt");
     }
 
     @Test
@@ -742,9 +772,21 @@ public class FirIdeNormalAnalysisLibrarySourceModuleReferenceResolveTestGenerate
         }
 
         @Test
+        @TestMetadata("DanglingAnnotationsResolvedFile.kt")
+        public void testDanglingAnnotationsResolvedFile() throws Exception {
+            runTest("analysis/analysis-api/testData/referenceResolve/danglingAnnotations/DanglingAnnotationsResolvedFile.kt");
+        }
+
+        @Test
         @TestMetadata("DanglingAnnotationsResolvedLocal.kt")
         public void testDanglingAnnotationsResolvedLocal() throws Exception {
             runTest("analysis/analysis-api/testData/referenceResolve/danglingAnnotations/DanglingAnnotationsResolvedLocal.kt");
+        }
+
+        @Test
+        @TestMetadata("DanglingAnnotationsResolvedPackageFile.kt")
+        public void testDanglingAnnotationsResolvedPackageFile() throws Exception {
+            runTest("analysis/analysis-api/testData/referenceResolve/danglingAnnotations/DanglingAnnotationsResolvedPackageFile.kt");
         }
 
         @Test
@@ -1248,6 +1290,22 @@ public class FirIdeNormalAnalysisLibrarySourceModuleReferenceResolveTestGenerate
             @Test
             public void testAllFilesPresentInQualified() throws Exception {
                 KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("analysis/analysis-api/testData/referenceResolve/kDoc/qualified"), Pattern.compile("^([^.]+)\\.kt$"), null, true, "withErrors");
+            }
+
+            @Nested
+            @TestMetadata("analysis/analysis-api/testData/referenceResolve/kDoc/qualified/conflictResolution")
+            @TestDataPath("$PROJECT_ROOT")
+            public class ConflictResolution {
+                @Test
+                public void testAllFilesPresentInConflictResolution() throws Exception {
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("analysis/analysis-api/testData/referenceResolve/kDoc/qualified/conflictResolution"), Pattern.compile("^([^.]+)\\.kt$"), null, true, "withErrors");
+                }
+
+                @Test
+                @TestMetadata("resolveToPackage.kt")
+                public void testResolveToPackage() throws Exception {
+                    runTest("analysis/analysis-api/testData/referenceResolve/kDoc/qualified/conflictResolution/resolveToPackage.kt");
+                }
             }
 
             @Nested
@@ -1791,6 +1849,18 @@ public class FirIdeNormalAnalysisLibrarySourceModuleReferenceResolveTestGenerate
         @TestMetadata("TypeParameterInFunctionLiteral.kt")
         public void testTypeParameterInFunctionLiteral() throws Exception {
             runTest("analysis/analysis-api/testData/referenceResolve/typeParameter/TypeParameterInFunctionLiteral.kt");
+        }
+
+        @Test
+        @TestMetadata("whereClause1.kt")
+        public void testWhereClause1() throws Exception {
+            runTest("analysis/analysis-api/testData/referenceResolve/typeParameter/whereClause1.kt");
+        }
+
+        @Test
+        @TestMetadata("whereClause2.kt")
+        public void testWhereClause2() throws Exception {
+            runTest("analysis/analysis-api/testData/referenceResolve/typeParameter/whereClause2.kt");
         }
     }
 }

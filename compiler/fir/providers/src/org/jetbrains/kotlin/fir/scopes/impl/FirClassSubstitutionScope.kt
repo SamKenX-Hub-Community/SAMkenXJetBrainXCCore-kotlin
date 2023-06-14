@@ -35,7 +35,8 @@ class FirClassSubstitutionScope(
     private val dispatchReceiverTypeForSubstitutedMembers: ConeClassLikeType,
     private val skipPrivateMembers: Boolean,
     private val makeExpect: Boolean = false,
-    private val derivedClassLookupTag: ConeClassLikeLookupTag
+    private val derivedClassLookupTag: ConeClassLikeLookupTag,
+    private val origin: FirDeclarationOrigin.SubstitutionOverride,
 ) : FirTypeScope() {
 
     private val substitutionOverrideCache = session.substitutionOverrideStorage.substitutionOverrideCacheByScope.getValue(key, null)
@@ -147,6 +148,7 @@ class FirClassSubstitutionScope(
                     derivedClassLookupTag = derivedClassLookupTag,
                     newDispatchReceiverType ?: dispatchReceiverTypeForSubstitutedMembers,
                     isExpect = makeExpect,
+                    origin = origin,
                 )
             }
             return original
@@ -163,6 +165,7 @@ class FirClassSubstitutionScope(
             member,
             derivedClassLookupTag,
             newDispatchReceiverType ?: dispatchReceiverTypeForSubstitutedMembers,
+            origin,
             newReceiverType,
             newContextReceiverTypes,
             newReturnType,
@@ -208,7 +211,7 @@ class FirClassSubstitutionScope(
             session,
             constructor,
             derivedClassLookupTag,
-            FirDeclarationOrigin.SubstitutionOverride,
+            origin,
             newDispatchReceiverType,
             // Constructors' return types are expected to be non-flexible (i.e., non raw)
             newReturnType?.lowerBoundIfFlexible(),
@@ -249,6 +252,7 @@ class FirClassSubstitutionScope(
                     member,
                     derivedClassLookupTag = derivedClassLookupTag,
                     newDispatchReceiverType ?: dispatchReceiverTypeForSubstitutedMembers,
+                    origin,
                     isExpect = makeExpect,
                 )
             }
@@ -262,6 +266,7 @@ class FirClassSubstitutionScope(
             member,
             derivedClassLookupTag,
             newDispatchReceiverType ?: dispatchReceiverTypeForSubstitutedMembers,
+            origin,
             newReceiverType,
             newContextReceiverTypes,
             newReturnType,
@@ -281,12 +286,16 @@ class FirClassSubstitutionScope(
     )
 
     private fun createSubstitutedData(member: FirCallableDeclaration, symbolForOverride: FirBasedSymbol<*>): SubstitutedData {
+        val memberOwnerClassLookupTag =
+            if (member is FirConstructor) (member.returnTypeRef.coneType as ConeClassLikeType).lookupTag
+            else member.dispatchReceiverClassLookupTagOrNull()
         val (newTypeParameters, substitutor) = FirFakeOverrideGenerator.createNewTypeParametersAndSubstitutor(
             session,
             member as FirTypeParameterRefsOwner,
             symbolForOverride,
             substitutor,
-            forceTypeParametersRecreation = dispatchReceiverTypeForSubstitutedMembers.lookupTag != member.dispatchReceiverClassLookupTagOrNull()
+            origin,
+            forceTypeParametersRecreation = dispatchReceiverTypeForSubstitutedMembers.lookupTag != memberOwnerClassLookupTag
         )
 
         val receiverType = member.receiverParameter?.typeRef?.coneType
@@ -317,7 +326,7 @@ class FirClassSubstitutionScope(
         // TODO: do we have fields with implicit type?
         val newReturnType = returnType?.substitute() ?: return original
 
-        return FirFakeOverrideGenerator.createSubstitutionOverrideField(session, member, derivedClassLookupTag, newReturnType)
+        return FirFakeOverrideGenerator.createSubstitutionOverrideField(session, member, derivedClassLookupTag, newReturnType, origin)
     }
 
     override fun processDeclaredConstructors(processor: (FirConstructorSymbol) -> Unit) {

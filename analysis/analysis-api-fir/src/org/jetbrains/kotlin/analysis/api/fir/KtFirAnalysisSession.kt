@@ -18,9 +18,16 @@ import org.jetbrains.kotlin.analysis.api.lifetime.KtLifetimeToken
 import org.jetbrains.kotlin.analysis.api.lifetime.withValidityAssertion
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.LLFirResolveSession
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.LowLevelFirApiFacadeForResolveOnAir
+import org.jetbrains.kotlin.analysis.providers.impl.declarationProviders.CompositeKotlinDeclarationProvider
+import org.jetbrains.kotlin.analysis.low.level.api.fir.project.structure.CompositeKotlinPackageProvider
+import org.jetbrains.kotlin.analysis.low.level.api.fir.resolve.extensions.LLFirResolveExtensionTool
+import org.jetbrains.kotlin.analysis.low.level.api.fir.resolve.extensions.llResolveExtensionTool
 import org.jetbrains.kotlin.analysis.project.structure.KtModule
+import org.jetbrains.kotlin.analysis.project.structure.allDirectDependencies
 import org.jetbrains.kotlin.analysis.providers.KotlinDeclarationProvider
+import org.jetbrains.kotlin.analysis.providers.KotlinPackageProvider
 import org.jetbrains.kotlin.analysis.providers.createDeclarationProvider
+import org.jetbrains.kotlin.analysis.providers.createPackageProvider
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.moduleData
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
@@ -29,6 +36,7 @@ import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
 import org.jetbrains.kotlin.platform.TargetPlatform
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.utils.addIfNotNull
 
 @OptIn(KtAnalysisApiInternals::class)
 @Suppress("AnalysisApiMissingLifetimeCheck")
@@ -62,7 +70,7 @@ private constructor(
 
     override val samResolverImpl = KtFirSamResolver(this, token)
 
-    override val scopeProviderImpl = KtFirScopeProvider(this, firSymbolBuilder, project, firResolveSession)
+    override val scopeProviderImpl = KtFirScopeProvider(this, firSymbolBuilder, firResolveSession)
 
     override val symbolProviderImpl =
         KtFirSymbolProvider(this, firResolveSession.useSiteFirSession.symbolProvider)
@@ -100,11 +108,13 @@ private constructor(
 
     override val multiplatformInfoProviderImpl: KtMultiplatformInfoProvider = KtFirMultiplatformInfoProvider(this, token)
 
+    override val originalPsiProviderImpl: KtOriginalPsiProvider = KtFirOriginalPsiProvider(this, token)
+
     override val symbolInfoProviderImpl: KtSymbolInfoProvider = KtFirSymbolInfoProvider(this, token)
 
     override val typesCreatorImpl: KtTypeCreator = KtFirTypeCreator(this, token)
 
-    override val analysisScopeProviderImpl: KtAnalysisScopeProvider = KtAnalysisScopeProviderImpl(this, token)
+    override val analysisScopeProviderImpl: KtAnalysisScopeProvider
 
     override val referenceResolveProviderImpl: KtReferenceResolveProvider = KtFirReferenceResolveProvider(this)
 
@@ -115,6 +125,8 @@ private constructor(
     override val substitutorFactoryImpl: KtSubstitutorFactory = KtFirSubstitutorFactory(this)
 
     override val symbolProviderByJavaPsiImpl = KtFirSymbolProviderByJavaPsi(this)
+
+    override val resolveExtensionProviderImpl: KtSymbolFromResolveExtensionProvider = KtFirSymbolFromResolveExtensionProvider(this)
 
     @Suppress("AnalysisApiMissingLifetimeCheck")
     override fun createContextDependentCopy(originalKtFile: KtFile, elementToReanalyze: KtElement): KtAnalysisSession {
@@ -141,8 +153,49 @@ private constructor(
     internal val firSymbolProvider: FirSymbolProvider get() = useSiteSession.symbolProvider
     internal val targetPlatform: TargetPlatform get() = useSiteSession.moduleData.platform
 
-    val useSiteAnalysisScope: GlobalSearchScope = analysisScopeProviderImpl.getAnalysisScope()
-    val useSiteScopeDeclarationProvider: KotlinDeclarationProvider = project.createDeclarationProvider(useSiteAnalysisScope)
+    val extensionTools: List<LLFirResolveExtensionTool>
+
+    val useSiteAnalysisScope: GlobalSearchScope
+
+    val useSiteScopeDeclarationProvider: KotlinDeclarationProvider
+    val useSitePackageProvider: KotlinPackageProvider
+
+
+    init {
+        extensionTools = buildList {
+            addIfNotNull(useSiteSession.llResolveExtensionTool)
+            useSiteModule.allDirectDependencies().mapNotNullTo(this) { dependency ->
+                firResolveSession.getSessionFor(dependency).llResolveExtensionTool
+            }
+        }
+
+        val shadowedScope = GlobalSearchScope.union(
+            buildSet {
+                // Add an empty scope to the shadowed set to give GlobalSearchScope.union something
+                // to work with if there are no extension tools.
+                // If there are extension tools, any empty scopes, whether from shadowedSearchScope
+                // on the extension tools or from this add() call, will be ignored.
+                add(GlobalSearchScope.EMPTY_SCOPE)
+                extensionTools.mapTo(this) { it.shadowedSearchScope }
+            }
+        )
+        analysisScopeProviderImpl = KtAnalysisScopeProviderImpl(this, token, shadowedScope)
+        useSiteAnalysisScope = analysisScopeProviderImpl.getAnalysisScope()
+
+        useSiteScopeDeclarationProvider = CompositeKotlinDeclarationProvider.create(
+            buildList {
+                add(project.createDeclarationProvider(useSiteAnalysisScope, useSiteModule))
+                extensionTools.mapTo(this) { it.declarationProvider }
+            }
+        )
+
+        useSitePackageProvider = CompositeKotlinPackageProvider.create(
+            buildList {
+                add(project.createPackageProvider(useSiteAnalysisScope))
+                extensionTools.mapTo(this) { it.packageProvider }
+            }
+        )
+    }
 
     fun getScopeSessionFor(session: FirSession): ScopeSession = withValidityAssertion { firResolveSession.getScopeSessionFor(session) }
 

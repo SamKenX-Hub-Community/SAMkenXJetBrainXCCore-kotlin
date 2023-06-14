@@ -9,6 +9,7 @@ import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
 import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.labelName
 import org.jetbrains.kotlin.fir.resolve.*
 import org.jetbrains.kotlin.fir.resolve.calls.*
@@ -202,6 +203,21 @@ class FirTowerDataContext private constructor(
         return addNonLocalScope(scope)
     }
 
+    // Optimized version for two parameters
+    fun addNonLocalScopesIfNotNull(scope1: FirScope?, scope2: FirScope?): FirTowerDataContext {
+        return if (scope1 != null) {
+            if (scope2 != null) {
+                addNonLocalScopeElements(listOf(scope1.asTowerDataElement(isLocal = false), scope2.asTowerDataElement(isLocal = false)))
+            } else {
+                addNonLocalScope(scope1)
+            }
+        } else if (scope2 != null) {
+            addNonLocalScope(scope2)
+        } else {
+            this
+        }
+    }
+
     fun addNonLocalScope(scope: FirScope): FirTowerDataContext {
         val element = scope.asTowerDataElement(isLocal = false)
         return FirTowerDataContext(
@@ -209,6 +225,15 @@ class FirTowerDataContext private constructor(
             implicitReceiverStack,
             localScopes,
             nonLocalTowerDataElements.add(element)
+        )
+    }
+
+    private fun addNonLocalScopeElements(elements: List<FirTowerDataElement>): FirTowerDataContext {
+        return FirTowerDataContext(
+            towerDataElements.addAll(elements),
+            implicitReceiverStack,
+            localScopes,
+            nonLocalTowerDataElements.addAll(elements)
         )
     }
 
@@ -252,7 +277,7 @@ class FirTowerDataElement(
     }
 
     private fun ImplicitReceiverValue<*>.getImplicitScope(): FirScope {
-        return when (expandedType) {
+        return when (type.fullyExpandedType(useSiteSession)) {
             is ConeErrorType,
             is ConeStubType -> FirTypeScope.Empty
             else -> implicitScope ?: error("Scope for type ${type::class.simpleName} is null.")

@@ -175,6 +175,8 @@ bitcode {
             sourceSets {
                 main {}
             }
+
+            compilerArgs.add("-DKONAN_MI_MALLOC=1")
         }
 
         module("exceptionsSupport") {
@@ -404,7 +406,7 @@ val hostRuntimeTests by tasks.registering {
     dependsOn("${hostName}RuntimeTests")
 }
 
-val assemble by tasks.getting {
+tasks.named("assemble") {
     dependsOn(targetList.map { "${it}Runtime" })
 }
 
@@ -412,7 +414,7 @@ val hostAssemble by tasks.registering {
     dependsOn("${hostName}Runtime")
 }
 
-val clean by tasks.getting {
+tasks.named("clean") {
     doFirst {
         delete(buildDir)
     }

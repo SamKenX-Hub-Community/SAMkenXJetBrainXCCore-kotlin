@@ -6,6 +6,7 @@ package org.jetbrains.kotlin.native.interop.gen
 
 import kotlinx.metadata.*
 import kotlinx.metadata.klib.*
+import kotlinx.metadata.internal.common.*
 import org.jetbrains.kotlin.metadata.serialization.Interner
 import org.jetbrains.kotlin.utils.addIfNotNull
 
@@ -370,14 +371,16 @@ private class MappingExtensions(
             }
 
     fun AnnotationStub.map(): KmAnnotation {
-        fun Pair<String, String>.asAnnotationArgument() =
-                (first to KmAnnotationArgument.StringValue(second)).takeIf { second.isNotEmpty() }
+        fun Pair<String, String>.asOptionalAnnotationArgument(): Pair<String, KmAnnotationArgument.StringValue>? {
+            val (argumentName, argumentValue) = this
+            return if (argumentValue.isEmpty()) null else argumentName to KmAnnotationArgument.StringValue(argumentValue)
+        }
 
         fun replaceWith(replaceWith: String) = KmAnnotationArgument.AnnotationValue(KmAnnotation(
                 Classifier.topLevel("kotlin", "ReplaceWith").fqNameSerialized,
                 mapOfNotNull(
                         "imports" to KmAnnotationArgument.ArrayValue(emptyList()),
-                        ("expression" to replaceWith).asAnnotationArgument()
+                        "expression" to KmAnnotationArgument.StringValue(replaceWith)
                 )
         ))
 
@@ -390,35 +393,35 @@ private class MappingExtensions(
             AnnotationStub.ObjC.ConsumesReceiver -> emptyMap()
             AnnotationStub.ObjC.ReturnsRetained -> emptyMap()
             is AnnotationStub.ObjC.Method -> mapOfNotNull(
-                    ("selector" to selector).asAnnotationArgument(),
-                    ("encoding" to encoding).asAnnotationArgument(),
+                    ("selector" to selector).asOptionalAnnotationArgument(),
+                    ("encoding" to encoding).asOptionalAnnotationArgument(),
                     ("isStret" to KmAnnotationArgument.BooleanValue(isStret))
             )
             is AnnotationStub.ObjC.Direct -> mapOfNotNull(
-                    ("symbol" to symbol).asAnnotationArgument(),
+                    ("symbol" to symbol).asOptionalAnnotationArgument(),
             )
             is AnnotationStub.ObjC.Factory -> mapOfNotNull(
-                    ("selector" to selector).asAnnotationArgument(),
-                    ("encoding" to encoding).asAnnotationArgument(),
+                    ("selector" to selector).asOptionalAnnotationArgument(),
+                    ("encoding" to encoding).asOptionalAnnotationArgument(),
                     ("isStret" to KmAnnotationArgument.BooleanValue(isStret))
             )
             AnnotationStub.ObjC.Consumed -> emptyMap()
             is AnnotationStub.ObjC.Constructor -> mapOfNotNull(
                     ("designated" to KmAnnotationArgument.BooleanValue(designated)),
-                    ("initSelector" to selector).asAnnotationArgument()
+                    ("initSelector" to selector).asOptionalAnnotationArgument()
             )
             is AnnotationStub.ObjC.ExternalClass -> mapOfNotNull(
-                    ("protocolGetter" to protocolGetter).asAnnotationArgument(),
-                    ("binaryName" to binaryName).asAnnotationArgument()
+                    ("protocolGetter" to protocolGetter).asOptionalAnnotationArgument(),
+                    ("binaryName" to binaryName).asOptionalAnnotationArgument()
             )
             AnnotationStub.CCall.CString -> emptyMap()
             AnnotationStub.CCall.WCString -> emptyMap()
             is AnnotationStub.CCall.Symbol -> mapOfNotNull(
-                    ("id" to symbolName).asAnnotationArgument()
+                    ("id" to symbolName).asOptionalAnnotationArgument()
             )
             is AnnotationStub.CCall.CppClassConstructor -> emptyMap()
             is AnnotationStub.CStruct -> mapOfNotNull(
-                    ("spelling" to struct).asAnnotationArgument()
+                    ("spelling" to struct).asOptionalAnnotationArgument()
             )
             is AnnotationStub.CNaturalStruct ->
                 error("@CNaturalStruct should not be used for Kotlin/Native interop")
@@ -426,12 +429,12 @@ private class MappingExtensions(
                     "value" to KmAnnotationArgument.LongValue(length)
             )
             is AnnotationStub.Deprecated -> mapOfNotNull(
-                    ("message" to message).asAnnotationArgument(),
+                    ("message" to message).asOptionalAnnotationArgument(),
                     ("replaceWith" to replaceWith(replaceWith)),
                     ("level" to deprecationLevel(level))
             )
             is AnnotationStub.CEnumEntryAlias -> mapOfNotNull(
-                    ("entryName" to entryName).asAnnotationArgument()
+                    ("entryName" to entryName).asOptionalAnnotationArgument()
             )
             is AnnotationStub.CEnumVarTypeSize -> mapOfNotNull(
                     ("size" to KmAnnotationArgument.IntValue(size))

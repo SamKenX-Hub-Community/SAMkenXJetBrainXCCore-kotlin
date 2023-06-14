@@ -37,6 +37,7 @@ dependencies {
     testApi(projectTests(":compiler:test-infrastructure-utils"))
     testApi(projectTests(":compiler:tests-compiler-utils"))
     testApi(projectTests(":compiler:tests-common-new"))
+    testImplementation(projectTests(":compiler:fir:analysis-tests"))
 
     testCompileOnly(project(":compiler:frontend"))
     testCompileOnly(project(":compiler:cli"))
@@ -108,18 +109,25 @@ val testDataDir = project(":js:js.translator").projectDir.resolve("testData")
 val typescriptTestsDir = testDataDir.resolve("typescript-export")
 
 val installTsDependencies = task<NpmTask>("installTsDependencies") {
+    val packageLockFile = testDataDir.resolve("package-lock.json")
+    inputs.file(testDataDir.resolve("package.json"))
+    outputs.file(packageLockFile)
+    outputs.upToDateWhen { packageLockFile.exists() }
+
     workingDir.set(testDataDir)
     args.set(listOf("install"))
 }
 
-fun sequential(first: Task? = null, tasks: List<Task>): Task {
-    val callback = { previousTask: Task, currentTask: Task -> currentTask.dependsOn(previousTask) }
-    if (first != null) {
-        tasks.fold(first, callback)
-    } else {
-        tasks.reduce(callback)
+fun parallel(tasksToRun: List<Task>, beforeAll: Task? = null, afterAll: Task? = null) = tasks.registering {
+    tasksToRun.forEach { dependsOn(it) }
+
+    if (beforeAll != null) {
+        tasksToRun.forEach { it.dependsOn(beforeAll) }
     }
-    return tasks.last()
+
+    if (afterAll != null) {
+        finalizedBy(afterAll)
+    }
 }
 
 val exportFileDirPostfix = "-in-exported-file"
@@ -134,7 +142,7 @@ fun generateJsExportOnFileTestFor(dir: String): Task = task<Copy>("generate-js-e
         include("**/*.ts")
         include("**/tsconfig.json")
     })
-    outputs.dir(outputDir.toPath())
+    outputs.dir(outputDir)
 
     from(inputDir) {
         include("**/*.kt")
@@ -166,22 +174,31 @@ fun generateJsExportOnFileTestFor(dir: String): Task = task<Copy>("generate-js-e
 }
 
 fun generateTypeScriptTestFor(dir: String): Task = task<NpmTask>("generate-ts-for-$dir") {
-    val baseDir = fileTree(typescriptTestsDir.resolve(dir))
+    val baseDir = typescriptTestsDir.resolve(dir)
+    val mainTsFile = fileTree(baseDir).files.find { it.name.endsWith("__main.ts") } ?: return@task
+    val mainJsFile = baseDir.resolve("${mainTsFile.nameWithoutExtension}.js")
 
     workingDir.set(testDataDir)
-    inputs.files(baseDir.include("*.ts"))
-    outputs.files(baseDir.include("*.js"))
+
+    inputs.file(mainTsFile)
+    outputs.file(mainJsFile)
+    outputs.upToDateWhen { mainJsFile.exists() }
+
     args.set(listOf("run", "generateTypeScriptTests", "--", "./typescript-export/$dir/tsconfig.json"))
 }
 
-val generateTypeScriptTests = sequential(
-    installTsDependencies,
-    typescriptTestsDir.listFiles { it: File -> it.isDirectory }
+val generateTypeScriptTests by parallel(
+    beforeAll = installTsDependencies,
+    tasksToRun = typescriptTestsDir.listFiles { it: File ->
+        it.isDirectory &&
+                !it.path.endsWith("module-systems") &&
+                !it.path.endsWith("module-systems-in-exported-file")
+    }
         .map { generateTypeScriptTestFor(it.name) }
 )
 
-val generateTypeScriptJsExportOnFileTests = sequential(
-    tasks = typescriptTestsDir
+val generateTypeScriptJsExportOnFileTests by parallel(
+    typescriptTestsDir
         .listFiles { it: File ->
             it.isDirectory &&
                     !it.path.endsWith("selective-export") &&
@@ -192,7 +209,6 @@ val generateTypeScriptJsExportOnFileTests = sequential(
                     !it.path.endsWith(exportFileDirPostfix)
         }
         .map { generateJsExportOnFileTestFor(it.name) }
-        .plus(generateTypeScriptTests)
 )
 
 fun Test.setupNodeJs() {
@@ -390,15 +406,26 @@ val generateTests by generator("org.jetbrains.kotlin.generators.tests.GenerateJs
     dependsOn(generateTypeScriptJsExportOnFileTests)
 }
 
-val prepareNpmTestData by tasks.registering(Copy::class) {
-    from(testDataDir) {
-        include("package.json")
-        include("test.js")
-    }
+
+val testJsFile = testDataDir.resolve("test.js")
+val packageJsonFile = testDataDir.resolve("package.json")
+
+val prepareNpmTestData by task<Copy> {
+    inputs.files(testJsFile, packageJsonFile)
+    outputs.dir(nodeDir)
+
+    from(testJsFile)
+    from(packageJsonFile)
     into(nodeDir)
 }
 
 val npmInstall by tasks.getting(NpmTask::class) {
+    val packageLockFile = testDataDir.resolve("package-lock.json")
+
+    inputs.file(nodeDir.resolve("package.json"))
+    outputs.file(packageLockFile)
+    outputs.upToDateWhen { packageLockFile.exists() }
+
     workingDir.set(nodeDir)
     dependsOn(prepareNpmTestData)
 }

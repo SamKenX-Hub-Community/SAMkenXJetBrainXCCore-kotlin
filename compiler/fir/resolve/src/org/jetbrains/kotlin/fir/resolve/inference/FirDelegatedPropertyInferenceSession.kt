@@ -41,7 +41,7 @@ class FirDelegatedPropertyInferenceSession(
         }
     }
 
-    fun integrateResolvedCall(storage: ConstraintStorage) {
+    private fun integrateResolvedCall(storage: ConstraintStorage) {
         registerSyntheticVariables(storage)
         val stubToTypeVariableSubstitutor = createToSyntheticTypeVariableSubstitutor()
         integrateConstraints(
@@ -72,8 +72,8 @@ class FirDelegatedPropertyInferenceSession(
         if (callee.candidate.system.hasContradiction) return true
 
         val hasStubType =
-            callee.candidate.chosenExtensionReceiverValue?.type?.containsStubType() ?: false
-                    || callee.candidate.dispatchReceiverValue?.type?.containsStubType() ?: false
+            callee.candidate.chosenExtensionReceiver?.typeRef?.coneType?.containsStubType() ?: false
+                    || callee.candidate.dispatchReceiver?.typeRef?.coneType?.containsStubType() ?: false
 
         if (!hasStubType) {
             return true
@@ -165,7 +165,6 @@ class FirDelegatedPropertyInferenceSession(
     fun completeCandidates(): List<FirResolvable> {
         val commonSystem = components.session.inferenceComponents.createConstraintSystem()
 
-        @Suppress("UNCHECKED_CAST")
         val notCompletedCalls = partiallyResolvedCalls.mapNotNull { partiallyResolvedCall ->
             partiallyResolvedCall.first.takeIf { resolvable ->
                 resolvable.candidate() != null
@@ -233,9 +232,7 @@ class FirDelegatedPropertyInferenceSession(
             .replaceStubsAndTypeVariablesToErrors(typeContext, stubTypesByTypeVariable.values.map { it.constructor })
     }
 
-    val stubTypesByTypeVariable: MutableMap<ConeTypeVariable, ConeStubType> = mutableMapOf()
-    val stubTypeBySyntheticTypeVariable: MutableMap<ConeTypeVariable, ConeStubType> = mutableMapOf()
-
+    private val stubTypesByTypeVariable: MutableMap<ConeTypeVariable, ConeStubType> = mutableMapOf()
     private val syntheticTypeVariableByTypeVariable = mutableMapOf<TypeVariableMarker, ConeTypeVariable>()
 
     private fun registerSyntheticVariables(storage: ConstraintStorage) {
@@ -252,9 +249,7 @@ class FirDelegatedPropertyInferenceSession(
                 ConeStubTypeForChainInference(
                     syntheticVariable,
                     ConeNullability.create(syntheticVariable.defaultType.isMarkedNullable)
-                ).also {
-                    stubTypeBySyntheticTypeVariable[syntheticVariable] = it
-                }
+                )
             }
         }
     }
@@ -283,7 +278,7 @@ class FirDelegatedPropertyInferenceSession(
         storage: ConstraintStorage,
         nonFixedToVariablesSubstitutor: ConeSubstitutor,
         shouldIntegrateAllConstraints: Boolean
-    ): Boolean {
+    ) {
         if (shouldIntegrateAllConstraints) {
             storage.notFixedTypeVariables.values.forEach {
                 if (isSyntheticTypeVariable(it.typeVariable)) return@forEach
@@ -300,15 +295,10 @@ class FirDelegatedPropertyInferenceSession(
         val callSubstitutor =
             storage.buildAbstractResultingSubstitutor(commonSystem, transformTypeVariablesToErrorTypes = false) as ConeSubstitutor
 
-        var introducedConstraint = false
-
         for (initialConstraint in storage.initialConstraints) {
-            if (integrateConstraintToSystem(
-                    commonSystem, initialConstraint, callSubstitutor, nonFixedToVariablesSubstitutor, storage.fixedTypeVariables
-                )
-            ) {
-                introducedConstraint = true
-            }
+            integrateConstraintToSystem(
+                commonSystem, initialConstraint, callSubstitutor, nonFixedToVariablesSubstitutor, storage.fixedTypeVariables
+            )
         }
 
         if (shouldIntegrateAllConstraints) {
@@ -318,10 +308,7 @@ class FirDelegatedPropertyInferenceSession(
 
                 commonSystem.registerTypeVariableIfNotPresent(typeVariable)
                 commonSystem.addEqualityConstraint((typeVariable as ConeTypeVariable).defaultType, type, BuilderInferencePosition)
-                introducedConstraint = true
             }
         }
-
-        return introducedConstraint
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2023 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -18,6 +18,9 @@ import kotlin.collections.MutableMap.MutableEntry
  * The insertion order is preserved by maintaining a doubly-linked list of all of its entries.
  */
 public actual open class LinkedHashMap<K, V> : HashMap<K, V>, MutableMap<K, V> {
+    private companion object {
+        private val Empty = LinkedHashMap<Nothing, Nothing>(0).also { it.isReadOnly = true }
+    }
 
     /**
      * The entry we use includes next/prev pointers for a doubly-linked circular
@@ -167,7 +170,7 @@ public actual open class LinkedHashMap<K, V> : HashMap<K, V>, MutableMap<K, V> {
     private var isReadOnly: Boolean = false
 
     /**
-     * Constructs an empty [LinkedHashMap] instance.
+     * Creates a new empty [LinkedHashMap].
      */
     actual constructor() : super() {
         map = HashMap<K, ChainEntry<K, V>>()
@@ -179,21 +182,41 @@ public actual open class LinkedHashMap<K, V> : HashMap<K, V>, MutableMap<K, V> {
     }
 
     /**
-     * Constructs an empty [LinkedHashMap] instance.
+     * Creates a new empty [LinkedHashMap] with the specified initial capacity and load factor.
      *
-     * @param  initialCapacity the initial capacity (ignored)
-     * @param  loadFactor      the load factor (ignored)
+     * Capacity is the maximum number of entries the map is able to store in current internal data structure.
+     * Load factor is the measure of how full the map is allowed to get in relation to
+     * its capacity before the capacity is expanded, which usually leads to rebuild of the internal data structure.
      *
-     * @throws IllegalArgumentException if the initial capacity or load factor are negative
+     * @param initialCapacity the initial capacity of the created map.
+     *   Note that the argument is just a hint for the implementation and can be ignored.
+     * @param loadFactor the load factor of the created map.
+     *   Note that the argument is just a hint for the implementation and can be ignored.
+     *
+     * @throws IllegalArgumentException if [initialCapacity] is negative or [loadFactor] is non-positive.
      */
     actual constructor(initialCapacity: Int, loadFactor: Float) : super(initialCapacity, loadFactor) {
         map = HashMap<K, ChainEntry<K, V>>()
     }
 
-    actual constructor(initialCapacity: Int) : this(initialCapacity, 0.0f)
+    /**
+     * Creates a new empty [LinkedHashMap] with the specified initial capacity.
+     *
+     * Capacity is the maximum number of entries the map is able to store in current internal data structure.
+     * When the map gets full by a certain default load factor, its capacity is expanded,
+     * which usually leads to rebuild of the internal data structure.
+     *
+     * @param initialCapacity the initial capacity of the created map.
+     *   Note that the argument is just a hint for the implementation and can be ignored.
+     *
+     * @throws IllegalArgumentException if [initialCapacity] is negative.
+     */
+    actual constructor(initialCapacity: Int) : this(initialCapacity, 1.0f)
 
     /**
-     * Constructs an instance of [LinkedHashMap] filled with the contents of the specified [original] map.
+     * Creates a new [LinkedHashMap] filled with the contents of the specified [original] map.
+     *
+     * The iteration order of entries in the created map is the same as in the [original] map.
      */
     actual constructor(original: Map<out K, V>) {
         map = HashMap<K, ChainEntry<K, V>>()
@@ -204,7 +227,8 @@ public actual open class LinkedHashMap<K, V> : HashMap<K, V>, MutableMap<K, V> {
     internal fun build(): Map<K, V> {
         checkIsMutable()
         isReadOnly = true
-        return this
+        @Suppress("UNCHECKED_CAST")
+        return if (size > 0) this else (Empty as Map<K, V>)
     }
 
     actual override fun clear() {

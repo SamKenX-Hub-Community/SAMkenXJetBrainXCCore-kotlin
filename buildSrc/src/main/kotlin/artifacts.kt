@@ -8,14 +8,13 @@ import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.ConfigurationContainer
 import org.gradle.api.artifacts.PublishArtifact
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
-import org.gradle.api.attributes.LibraryElements
-import org.gradle.api.attributes.Usage
 import org.gradle.api.component.AdhocComponentWithVariants
 import org.gradle.api.file.ArchiveOperations
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.plugins.BasePluginExtension
 import org.gradle.api.plugins.JavaPlugin
-import org.gradle.api.plugins.JavaPlugin.*
+import org.gradle.api.plugins.JavaPlugin.JAVADOC_ELEMENTS_CONFIGURATION_NAME
+import org.gradle.api.plugins.JavaPlugin.SOURCES_ELEMENTS_CONFIGURATION_NAME
 import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.provider.Provider
 import org.gradle.api.publish.PublishingExtension
@@ -73,8 +72,9 @@ fun Project.noDefaultJar() {
     configurations.named("archives", removeJarTaskArtifact(jarTask))
 }
 
-fun Jar.addEmbeddedRuntime() {
-    project.configurations.findByName("embedded")?.let { embedded ->
+@JvmOverloads
+fun Jar.addEmbeddedRuntime(embeddedConfigurationName: String = "embedded") {
+    project.configurations.findByName(embeddedConfigurationName)?.let { embedded ->
         dependsOn(embedded)
         val archiveOperations = project.serviceOf<ArchiveOperations>()
         from {
@@ -183,8 +183,29 @@ fun Project.sourcesJar(body: Jar.() -> Unit = {}): TaskProvider<Jar> {
     return sourcesJar
 }
 
-fun Jar.addEmbeddedSources() {
-    project.configurations.findByName("embedded")?.let { embedded ->
+/**
+ * Also embeds into final '-sources.jar' file source files from embedded dependencies.
+ */
+fun Project.sourcesJarWithSourcesFromEmbedded(
+    vararg embeddedDepSourcesJarTasks: TaskProvider<out Jar>,
+    body: Jar.() -> Unit = {},
+): TaskProvider<Jar> {
+    val sourcesJarTask = sourcesJar(body)
+
+    sourcesJarTask.configure {
+        val archiveOperations = serviceOf<ArchiveOperations>()
+        embeddedDepSourcesJarTasks.forEach { embeddedSourceJarTask ->
+            dependsOn(embeddedSourceJarTask)
+            from(embeddedSourceJarTask.map { archiveOperations.zipTree(it.archiveFile) })
+        }
+    }
+
+    return sourcesJarTask
+}
+
+@JvmOverloads
+fun Jar.addEmbeddedSources(configurationName: String = "embedded") {
+    project.configurations.findByName(configurationName)?.let { embedded ->
         val allSources by lazy {
             embedded.resolvedConfiguration
                 .resolvedArtifacts
@@ -222,13 +243,34 @@ fun Project.javadocJar(body: Jar.() -> Unit = {}): TaskProvider<Jar> {
     return javadocTask
 }
 
+/**
+ * Also embeds into final '-javadoc.jar' file javadoc files from embedded dependencies.
+ */
+fun Project.javadocJarWithJavadocFromEmbedded(
+    vararg embeddedDepJavadocJarTasks: TaskProvider<out Jar>,
+    body: Jar.() -> Unit = {},
+): TaskProvider<Jar> {
+    val javadocJarTask = javadocJar(body)
+
+    javadocJarTask.configure {
+        val archiveOperations = serviceOf<ArchiveOperations>()
+        embeddedDepJavadocJarTasks.forEach { embeddedJavadocJarTask ->
+            dependsOn(embeddedJavadocJarTask)
+            from(embeddedJavadocJarTask.map { archiveOperations.zipTree(it.archiveFile) })
+        }
+    }
+
+    return javadocJarTask
+}
+
+
 fun Project.standardPublicJars() {
     runtimeJar()
     sourcesJar()
     javadocJar()
 }
 
-fun Project.publish(moduleMetadata: Boolean = false, configure: MavenPublication.() -> Unit = { }) {
+fun Project.publish(moduleMetadata: Boolean = false, sbom: Boolean = true, configure: MavenPublication.() -> Unit = { }) {
     apply<KotlinBuildPublishingPlugin>()
 
     if (!moduleMetadata) {
@@ -241,6 +283,9 @@ fun Project.publish(moduleMetadata: Boolean = false, configure: MavenPublication
         ?.publications
         ?.findByName(mainPublicationName) as MavenPublication
     publication.configure()
+    if (sbom) {
+        configureSbom()
+    }
 }
 
 fun Project.idePluginDependency(block: () -> Unit) {
@@ -337,7 +382,7 @@ fun Project.publishTestJar(projects: List<String>, excludedPaths: List<String>) 
         }
     }
 
-    publish()
+    publish(sbom = false)
 
     val jar: Jar by tasks
 

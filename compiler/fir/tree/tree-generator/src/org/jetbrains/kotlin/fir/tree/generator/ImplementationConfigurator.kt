@@ -129,6 +129,46 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
             useTypes(explicitThisReferenceType, explicitSuperReferenceType)
         }
 
+        impl(multiDelegatedConstructorCall) {
+            default("source") {
+                value = "delegatedConstructorCalls.last().source"
+                withGetter = true
+            }
+            default("annotations") {
+                value = "delegatedConstructorCalls.last().annotations"
+                withGetter = true
+            }
+            default("argumentList") {
+                value = "delegatedConstructorCalls.last().argumentList"
+                withGetter = true
+            }
+            default("contextReceiverArguments") {
+                value = "delegatedConstructorCalls.last().contextReceiverArguments"
+                withGetter = true
+            }
+            default("constructedTypeRef") {
+                value = "delegatedConstructorCalls.last().constructedTypeRef"
+                withGetter = true
+            }
+            default("dispatchReceiver") {
+                value = "delegatedConstructorCalls.last().dispatchReceiver"
+                withGetter = true
+            }
+            default("calleeReference") {
+                value = "delegatedConstructorCalls.last().calleeReference"
+                withGetter = true
+            }
+            default("isThis") {
+                value = "delegatedConstructorCalls.last().isThis"
+                withGetter = true
+            }
+            default("isSuper") {
+                value = "!isThis"
+                withGetter = true
+            }
+            publicImplementation()
+        }
+
         impl(delegatedConstructorCall, "FirLazyDelegatedConstructorCall") {
             val error = """error("FirLazyDelegatedConstructorCall should be calculated before accessing")"""
             default("source") {
@@ -394,6 +434,14 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
             }
         }
 
+        impl(enumEntryDeserializedAccessExpression) {
+            noSource()
+            default("typeRef") {
+                value = "buildResolvedTypeRef { type = enumClassId.toLookupTag().constructClassType(emptyArray(), false) }"
+                useTypes(buildResolvedTypeRefImport, toLookupTagImport, constructClassTypeImport)
+            }
+        }
+
         impl(smartCastExpression) {
             default("isStable") {
                 value = "smartcastStability == SmartcastStability.STABLE_VALUE"
@@ -436,6 +484,7 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
                 value = "null"
                 isMutable = true
             }
+            defaultFalse("isImplicit")
         }
 
         impl(thisReference, "FirImplicitThisReference") {
@@ -447,6 +496,7 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
             default("boundSymbol") {
                 isMutable = false
             }
+            defaultTrue("isImplicit")
         }
 
         impl(superReference, "FirExplicitSuperReference")
@@ -562,8 +612,9 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
         noImpl(argumentList)
         noImpl(annotationArgumentMapping)
 
+        impl(contractElementDeclaration)
+
         val implementationsWithoutStatusAndTypeParameters = listOf(
-            "FirAnonymousFunctionImpl",
             "FirValueParameterImpl",
             "FirDefaultSetterValueParameter",
             "FirErrorPropertyImpl",
@@ -580,7 +631,7 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
 
         configureFieldInAllImplementations(
             "typeParameters",
-            implementationPredicate = { it.type != "FirAnonymousFunctionImpl" && it.type in implementationsWithoutStatusAndTypeParameters }
+            implementationPredicate = { it.type in implementationsWithoutStatusAndTypeParameters }
         ) {
             defaultEmptyList(it)
             useTypes(resolvedDeclarationStatusImplType)
@@ -617,7 +668,8 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
             "FirReceiverParameterImpl",
             "FirClassReferenceExpressionImpl",
             "FirGetClassCallImpl",
-            "FirSmartCastExpressionImpl"
+            "FirSmartCastExpressionImpl",
+            "FirInaccessibleReceiverExpressionImpl"
         )
         configureFieldInAllImplementations(
             field = "typeRef",

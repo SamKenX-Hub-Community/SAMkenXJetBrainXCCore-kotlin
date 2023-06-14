@@ -9,10 +9,10 @@ import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.FirSessionComponent
 import org.jetbrains.kotlin.fir.declarations.FirClass
+import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
-import org.jetbrains.kotlin.fir.declarations.utils.delegateFields
-import org.jetbrains.kotlin.fir.declarations.utils.isExpect
+import org.jetbrains.kotlin.fir.declarations.utils.*
 import org.jetbrains.kotlin.fir.resolve.*
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeRawScopeSubstitutor
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
@@ -39,16 +39,31 @@ class FirKotlinScopeProvider(
         scopeSession: ScopeSession,
         memberRequiredPhase: FirResolvePhase?,
     ): FirTypeScope {
-        return scopeSession.getOrBuild(klass.symbol, USE_SITE) {
-            val declaredScope = useSiteSession.declaredMemberScope(klass)
+        memberRequiredPhase?.let {
+            klass.lazyResolveToPhaseWithCallableMembers(it)
+        }
 
-            val decoratedDeclaredMemberScope =
-                declaredMemberScopeDecorator(klass, declaredScope, useSiteSession, scopeSession, memberRequiredPhase).let {
-                    val delegateFields = klass.delegateFields
-                    if (delegateFields.isEmpty())
-                        it
-                    else
-                        FirDelegatedMemberScope(useSiteSession, scopeSession, klass, it, delegateFields)
+        return scopeSession.getOrBuild(klass.symbol, USE_SITE) {
+            val declaredScope = useSiteSession.declaredMemberScope(klass, memberRequiredPhase)
+            val possiblyDelegatedDeclaredMemberScope = declaredMemberScopeDecorator(
+                klass,
+                declaredScope,
+                useSiteSession,
+                scopeSession,
+                memberRequiredPhase
+            ).let {
+                val delegateFields = klass.delegateFields
+                if (delegateFields.isEmpty())
+                    it
+                else
+                    FirDelegatedMemberScope(useSiteSession, scopeSession, klass, it, delegateFields)
+            }
+            val declaredMemberScopeWithPossiblySynthesizedMembers =
+                if (klass is FirRegularClass && !klass.isExpect && (klass.isData || klass.isInline)) {
+                    // See also KT-58926 (we apply delegation first, and data/value classes after it)
+                    FirClassAnySynthesizedMemberScope(useSiteSession, possiblyDelegatedDeclaredMemberScope, klass, scopeSession)
+                } else {
+                    possiblyDelegatedDeclaredMemberScope
                 }
 
             val scopes = lookupSuperTypes(
@@ -60,7 +75,7 @@ class FirKotlinScopeProvider(
                 klass,
                 useSiteSession,
                 scopes,
-                decoratedDeclaredMemberScope,
+                declaredMemberScopeWithPossiblySynthesizedMembers,
             )
         }
     }
@@ -71,7 +86,14 @@ class FirKotlinScopeProvider(
         scopeSession: ScopeSession
     ): FirContainingNamesAwareScope? {
         return when (klass.classKind) {
-            ClassKind.ENUM_CLASS -> FirNameAwareOnlyCallablesScope(FirStaticScope(useSiteSession.declaredMemberScope(klass)))
+            ClassKind.ENUM_CLASS -> FirNameAwareOnlyCallablesScope(
+                FirStaticScope(
+                    useSiteSession.declaredMemberScope(
+                        klass,
+                        memberRequiredPhase = null,
+                    )
+                )
+            )
             else -> null
         }
     }
@@ -92,6 +114,10 @@ data class ConeSubstitutionScopeKey(
     val substitutor: ConeSubstitutor,
     val derivedClassLookupTag: ConeClassLikeLookupTag?
 ) : ScopeSessionKey<FirClass, FirClassSubstitutionScope>()
+
+data class AnySynthesizedScopeKey(
+    val lookupTag: ConeClassLikeLookupTag
+) : ScopeSessionKey<ConeClassLikeLookupTag, FirClassAnySynthesizedMemberScope>()
 
 fun FirClass.unsubstitutedScope(
     useSiteSession: FirSession,
@@ -173,10 +199,6 @@ private fun FirClass.scopeForClassImpl(
     memberOwnerLookupTag: ConeClassLikeLookupTag?,
     memberRequiredPhase: FirResolvePhase?,
 ): FirTypeScope {
-    memberRequiredPhase?.let {
-        lazyResolveToPhaseWithCallableMembers(it)
-    }
-
     val basicScope = unsubstitutedScope(useSiteSession, scopeSession, withForcedTypeCalculator = false, memberRequiredPhase)
     if (substitutor == ConeSubstitutor.Empty) return basicScope
 
@@ -195,7 +217,12 @@ private fun FirClass.scopeForClassImpl(
             substitutor.substituteOrSelf(classFirDispatchReceiver.defaultType()).lowerBoundIfFlexible() as ConeClassLikeType,
             skipPrivateMembers,
             makeExpect = isFromExpectClass,
-            memberOwnerLookupTag ?: classFirDispatchReceiver.symbol.toLookupTag()
+            memberOwnerLookupTag ?: classFirDispatchReceiver.symbol.toLookupTag(),
+            origin = if (classFirDispatchReceiver != this) {
+                FirDeclarationOrigin.SubstitutionOverride.DeclarationSite
+            } else {
+                FirDeclarationOrigin.SubstitutionOverride.CallSite
+            },
         )
     }
 }

@@ -26,11 +26,9 @@ class KotlinTargetHierarchyDslTest {
 
 
     @Test
-    @Suppress("DEPRECATION") // deprecated K/N targets
     fun `test - hierarchy default - targets from all families`() {
         kotlin.apply {
             targetHierarchy.default()
-            iosArm32()
             iosArm64()
             iosX64()
             iosSimulatorArm64()
@@ -45,10 +43,8 @@ class KotlinTargetHierarchyDslTest {
             macosArm64()
 
             linuxX64()
-            linuxArm32Hfp()
 
             mingwX64()
-            mingwX86()
 
             androidNativeArm32()
             androidNativeArm64()
@@ -60,7 +56,8 @@ class KotlinTargetHierarchyDslTest {
         )
 
         assertEquals(
-            stringSetOf("nativeTest"), kotlin.dependingSourceSetNames("commonTest")
+            stringSetOf("nativeTest"),
+            kotlin.dependingSourceSetNames("commonTest")
         )
 
         assertEquals(
@@ -84,12 +81,12 @@ class KotlinTargetHierarchyDslTest {
         )
 
         assertEquals(
-            stringSetOf("iosArm32Main", "iosArm64Main", "iosSimulatorArm64Main", "iosX64Main"),
+            stringSetOf("iosArm64Main", "iosSimulatorArm64Main", "iosX64Main"),
             kotlin.dependingSourceSetNames("iosMain")
         )
 
         assertEquals(
-            stringSetOf("iosArm32Test", "iosArm64Test", "iosSimulatorArm64Test", "iosX64Test"),
+            stringSetOf("iosArm64Test", "iosSimulatorArm64Test", "iosX64Test"),
             kotlin.dependingSourceSetNames("iosTest")
         )
 
@@ -114,13 +111,43 @@ class KotlinTargetHierarchyDslTest {
         )
 
         assertEquals(
-            stringSetOf("linuxArm32HfpMain", "linuxX64Main"),
+            stringSetOf("linuxX64Main"),
             kotlin.dependingSourceSetNames("linuxMain")
         )
 
         assertEquals(
-            stringSetOf("linuxArm32HfpTest", "linuxX64Test"),
+            stringSetOf("linuxX64Test"),
             kotlin.dependingSourceSetNames("linuxTest")
+        )
+
+        assertEquals(
+            stringSetOf("macosArm64Main", "macosX64Main"),
+            kotlin.dependingSourceSetNames("macosMain")
+        )
+
+        assertEquals(
+            stringSetOf("macosArm64Test", "macosX64Test"),
+            kotlin.dependingSourceSetNames("macosTest")
+        )
+
+        assertEquals(
+            stringSetOf("mingwX64Main"),
+            kotlin.dependingSourceSetNames("mingwMain")
+        )
+
+        assertEquals(
+            stringSetOf("mingwX64Test"),
+            kotlin.dependingSourceSetNames("mingwTest")
+        )
+
+        assertEquals(
+            stringSetOf("androidNativeArm32Main", "androidNativeArm64Main"),
+            kotlin.dependingSourceSetNames("androidNativeMain")
+        )
+
+        assertEquals(
+            stringSetOf("androidNativeArm32Test", "androidNativeArm64Test"),
+            kotlin.dependingSourceSetNames("androidNativeTest")
         )
     }
 
@@ -168,19 +195,19 @@ class KotlinTargetHierarchyDslTest {
 
         val kotlin = project.multiplatformExtension
 
-        assumeAndroidSdkAvailable()
+        assertAndroidSdkAvailable()
         project.androidLibrary { compileSdk = 31 }
 
         kotlin.targetHierarchy.default {
             common {
                 group("jvmAndAndroid") {
                     withJvm()
-                    withAndroid()
+                    withAndroidTarget()
                 }
             }
         }
 
-        kotlin.android()
+        kotlin.androidTarget()
         kotlin.jvm()
 
         project.evaluate()
@@ -208,7 +235,7 @@ class KotlinTargetHierarchyDslTest {
         /* Check all source sets: All from jvm and android target + expected common source sets */
         assertEquals(
             setOf("commonMain", "commonTest", "jvmAndAndroidMain", "jvmAndAndroidTest") +
-                    kotlin.android().compilations.flatMap { it.kotlinSourceSets }.map { it.name } +
+                    kotlin.androidTarget().compilations.flatMap { it.kotlinSourceSets }.map { it.name } +
                     kotlin.jvm().compilations.flatMap { it.kotlinSourceSets }.map { it.name },
             kotlin.sourceSets.map { it.name }.toStringSet()
         )
@@ -385,6 +412,63 @@ class KotlinTargetHierarchyDslTest {
 
         assertEquals(
             stringSetOf(), kotlin.dependingSourceSetNames("linuxX64Main")
+        )
+    }
+
+    /**
+     * Example from the documentation is supposed to create
+     *                       commonMain
+     *                           |
+     *              +------------+----------+
+     *              |                       |
+     *          frontendMain            appleMain
+     *              |                        |
+     *    +---------+------------+-----------+----------+
+     *    |                      |                      |
+     * jvmMain                iosMain               macosX64Main
+     *                           |
+     *                           |
+     *                      +----+----+
+     *                      |         |
+     *                iosX64Main   iosArm64Main
+     */
+    @Test
+    fun `test - diamond hierarchy from documentation example`() {
+        kotlin.targetHierarchy.custom {
+            common {
+                group("ios") {
+                    withIos()
+                }
+                group("frontend") {
+                    withJvm()
+                    group("ios") // <- ! We can again reference the 'ios' group
+                }
+                group("apple") {
+                    withMacos()
+                    group("ios") // <- ! We can again reference the 'ios' group
+                }
+            }
+        }
+
+        kotlin.iosX64()
+        kotlin.iosArm64()
+        kotlin.macosX64()
+        kotlin.jvm()
+
+        assertEquals(
+            stringSetOf("frontendMain", "appleMain"), kotlin.dependingSourceSetNames("commonMain")
+        )
+
+        assertEquals(
+            stringSetOf("jvmMain", "iosMain"), kotlin.dependingSourceSetNames("frontendMain")
+        )
+
+        assertEquals(
+            stringSetOf("macosX64Main", "iosMain"), kotlin.dependingSourceSetNames("appleMain")
+        )
+
+        assertEquals(
+            stringSetOf("iosArm64Main", "iosX64Main"), kotlin.dependingSourceSetNames("iosMain")
         )
     }
 

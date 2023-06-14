@@ -117,20 +117,7 @@ internal enum class OptimizationMode(private val description: String, val compil
 }
 
 /**
- * The Kotlin/Native memory model.
- */
-internal enum class MemoryModel(val compilerFlags: List<String>?) {
-    /**
-     * but it should be done at some point.
-     */
-    LEGACY(listOf("-memory-model", "strict")),
-    EXPERIMENTAL(listOf("-memory-model", "experimental"));
-
-    override fun toString() = compilerFlags?.joinToString(prefix = "(", separator = " ", postfix = ")").orEmpty()
-}
-
-/**
- * Thread state checked. Can be applied only with [MemoryModel.EXPERIMENTAL], [OptimizationMode.DEBUG], [CacheMode.WithoutCache].
+ * Thread state checked. Can be applied only with [OptimizationMode.DEBUG], [CacheMode.WithoutCache].
  */
 internal enum class ThreadStateChecker(val compilerFlag: String?) {
     DISABLED(null),
@@ -150,11 +137,15 @@ internal enum class Sanitizer(val compilerFlag: String?) {
 }
 
 /**
- * Garbage collector type. Can be applied only with [MemoryModel.EXPERIMENTAL].
+ * Garbage collector type.
  */
 internal enum class GCType(val compilerFlag: String?) {
     UNSPECIFIED(null),
-    NOOP("-Xgc=noop"),
+    NOOP("-Xbinary=gc=noop"),
+    STWMS("-Xbinary=gc=stwms"),
+    PMCS("-Xbinary=gc=pmcs"),
+
+    // TODO: Remove these deprecated GC options.
     STMS("-Xgc=stms"),
     CMS("-Xgc=cms");
 
@@ -163,10 +154,23 @@ internal enum class GCType(val compilerFlag: String?) {
 
 internal enum class GCScheduler(val compilerFlag: String?) {
     UNSPECIFIED(null),
+    MANUAL("-Xbinary=gcSchedulerType=manual"),
+    ADAPTIVE("-Xbinary=gcSchedulerType=adaptive"),
+    AGGRESSIVE("-Xbinary=gcSchedulerType=aggressive"),
+
+    // TODO: Remove these deprecated GC scheduler options.
     DISABLED("-Xbinary=gcSchedulerType=disabled"),
     WITH_TIMER("-Xbinary=gcSchedulerType=with_timer"),
-    ON_SAFE_POINTS("-Xbinary=gcSchedulerType=on_safe_points"),
-    AGGRESSIVE("-Xbinary=gcSchedulerType=aggressive");
+    ON_SAFE_POINTS("-Xbinary=gcSchedulerType=on_safe_points");
+
+    override fun toString() = compilerFlag?.let { "($it)" }.orEmpty()
+}
+
+internal enum class Allocator(val compilerFlag: String?) {
+    UNSPECIFIED(null),
+    STD("-Xallocator=std"),
+    MIMALLOC("-Xallocator=mimalloc"),
+    CUSTOM("-Xallocator=custom");
 
     override fun toString() = compilerFlag?.let { "($it)" }.orEmpty()
 }
@@ -181,7 +185,7 @@ internal class BaseDirs(val testBuildDir: File)
  */
 internal class Timeouts(val executionTimeout: Duration) {
     companion object {
-        val DEFAULT_EXECUTION_TIMEOUT: Duration get() = 15.seconds
+        val DEFAULT_EXECUTION_TIMEOUT: Duration get() = 30.seconds
     }
 }
 

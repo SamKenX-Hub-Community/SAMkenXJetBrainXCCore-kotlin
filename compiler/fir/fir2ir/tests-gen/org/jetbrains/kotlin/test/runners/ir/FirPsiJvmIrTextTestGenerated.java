@@ -1004,6 +1004,24 @@ public class FirPsiJvmIrTextTestGenerated extends AbstractFirPsiJvmIrTextTest {
             }
 
             @Test
+            @TestMetadata("expectIntersectionOverride.kt")
+            public void testExpectIntersectionOverride() throws Exception {
+                runTest("compiler/testData/ir/irText/declarations/multiplatform/expectIntersectionOverride.kt");
+            }
+
+            @Test
+            @TestMetadata("expectMemberInNotExpectClass.kt")
+            public void testExpectMemberInNotExpectClass() throws Exception {
+                runTest("compiler/testData/ir/irText/declarations/multiplatform/expectMemberInNotExpectClass.kt");
+            }
+
+            @Test
+            @TestMetadata("expectMemberInNotExpectClassFir.kt")
+            public void testExpectMemberInNotExpectClassFir() throws Exception {
+                runTest("compiler/testData/ir/irText/declarations/multiplatform/expectMemberInNotExpectClassFir.kt");
+            }
+
+            @Test
             @TestMetadata("expectedEnumClass.kt")
             public void testExpectedEnumClass() throws Exception {
                 runTest("compiler/testData/ir/irText/declarations/multiplatform/expectedEnumClass.kt");
@@ -2601,6 +2619,12 @@ public class FirPsiJvmIrTextTestGenerated extends AbstractFirPsiJvmIrTextTest {
         }
 
         @Test
+        @TestMetadata("dataObject.kt")
+        public void testDataObject() throws Exception {
+            runTest("compiler/testData/ir/irText/firProblems/dataObject.kt");
+        }
+
+        @Test
         @TestMetadata("DeepCopyIrTree.kt")
         public void testDeepCopyIrTree() throws Exception {
             runTest("compiler/testData/ir/irText/firProblems/DeepCopyIrTree.kt");
@@ -2715,6 +2739,12 @@ public class FirPsiJvmIrTextTestGenerated extends AbstractFirPsiJvmIrTextTest {
         }
 
         @Test
+        @TestMetadata("kt59102.kt")
+        public void testKt59102() throws Exception {
+            runTest("compiler/testData/ir/irText/firProblems/kt59102.kt");
+        }
+
+        @Test
         @TestMetadata("lambdaInEnumEntryConstructorCall.kt")
         public void testLambdaInEnumEntryConstructorCall() throws Exception {
             runTest("compiler/testData/ir/irText/firProblems/lambdaInEnumEntryConstructorCall.kt");
@@ -2730,6 +2760,12 @@ public class FirPsiJvmIrTextTestGenerated extends AbstractFirPsiJvmIrTextTest {
         @TestMetadata("localCompanion.kt")
         public void testLocalCompanion() throws Exception {
             runTest("compiler/testData/ir/irText/firProblems/localCompanion.kt");
+        }
+
+        @Test
+        @TestMetadata("LocalSuspendFun.kt")
+        public void testLocalSuspendFun() throws Exception {
+            runTest("compiler/testData/ir/irText/firProblems/LocalSuspendFun.kt");
         }
 
         @Test
@@ -2829,6 +2865,12 @@ public class FirPsiJvmIrTextTestGenerated extends AbstractFirPsiJvmIrTextTest {
         }
 
         @Test
+        @TestMetadata("timesInBuilder.kt")
+        public void testTimesInBuilder() throws Exception {
+            runTest("compiler/testData/ir/irText/firProblems/timesInBuilder.kt");
+        }
+
+        @Test
         @TestMetadata("TypeParameterBounds.kt")
         public void testTypeParameterBounds() throws Exception {
             runTest("compiler/testData/ir/irText/firProblems/TypeParameterBounds.kt");
@@ -2838,6 +2880,12 @@ public class FirPsiJvmIrTextTestGenerated extends AbstractFirPsiJvmIrTextTest {
         @TestMetadata("typeParameterFromJavaClass.kt")
         public void testTypeParameterFromJavaClass() throws Exception {
             runTest("compiler/testData/ir/irText/firProblems/typeParameterFromJavaClass.kt");
+        }
+
+        @Test
+        @TestMetadata("TypeParameterInNestedClass.kt")
+        public void testTypeParameterInNestedClass() throws Exception {
+            runTest("compiler/testData/ir/irText/firProblems/TypeParameterInNestedClass.kt");
         }
 
         @Test
@@ -2853,9 +2901,21 @@ public class FirPsiJvmIrTextTestGenerated extends AbstractFirPsiJvmIrTextTest {
         }
 
         @Test
+        @TestMetadata("valueClassEquals.kt")
+        public void testValueClassEquals() throws Exception {
+            runTest("compiler/testData/ir/irText/firProblems/valueClassEquals.kt");
+        }
+
+        @Test
         @TestMetadata("VarInInit.kt")
         public void testVarInInit() throws Exception {
             runTest("compiler/testData/ir/irText/firProblems/VarInInit.kt");
+        }
+
+        @Test
+        @TestMetadata("VarargIntegerLiteral.kt")
+        public void testVarargIntegerLiteral() throws Exception {
+            runTest("compiler/testData/ir/irText/firProblems/VarargIntegerLiteral.kt");
         }
     }
 

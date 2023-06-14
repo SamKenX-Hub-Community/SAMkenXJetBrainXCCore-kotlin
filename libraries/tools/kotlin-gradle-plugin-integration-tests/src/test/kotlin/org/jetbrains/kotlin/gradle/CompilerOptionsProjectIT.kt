@@ -74,7 +74,7 @@ class CompilerOptionsProjectIT : KGPBaseTest() {
                 |         apiVersion = org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_0
                 |         progressiveMode = true
                 |         optIn.add("my.custom.OptInAnnotation")
-                |         freeCompilerArgs.add("-Xuse-ir")
+                |         freeCompilerArgs.add("-Xdebug")
                 |    }
                 |}
                 """.trimMargin()
@@ -105,9 +105,9 @@ class CompilerOptionsProjectIT : KGPBaseTest() {
                     "Compiler arguments does not contain '-opt-in my.custom.OptInAnnotation': $compilationArgs"
                 }
 
-                assert(compilationArgs.contains("-Xuse-ir")) {
+                assert(compilationArgs.contains("-Xdebug")) {
                     printBuildOutput()
-                    "Compiler arguments does not contain '-Xuse-ir': $compilationArgs"
+                    "Compiler arguments does not contain '-Xdebug': $compilationArgs"
                 }
             }
         }
@@ -132,7 +132,7 @@ class CompilerOptionsProjectIT : KGPBaseTest() {
                 |         apiVersion = org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_0
                 |         progressiveMode = true
                 |         optIn.add("my.custom.OptInAnnotation")
-                |         freeCompilerArgs.add("-Xuse-ir")
+                |         freeCompilerArgs.add("-Xdebug")
                 |    }
                 |    
                 |    sourceSets.all {
@@ -151,32 +151,16 @@ class CompilerOptionsProjectIT : KGPBaseTest() {
             build("compileKotlin") {
                 assertTasksExecuted(":compileKotlin")
 
-                val compilationArgs = output.lineSequence().first { it.contains("Kotlin compiler args:") }
+                assertCompilerArguments(
+                    ":compileKotlin",
+                    "-language-version 1.9",
+                    "-api-version 1.9",
+                    "-Xdebug",
+                    "-opt-in my.custom.OptInAnnotation,another.CustomOptInAnnotation",
+                    "-XXLanguage:+UnitConversionsOnArbitraryExpressions"
+                )
 
-                assert(compilationArgs.contains("-language-version 1.9")) {
-                    printBuildOutput()
-                    "Compiler arguments does not contain '-language-version 1.9': $compilationArgs"
-                }
-
-                assert(compilationArgs.contains("-api-version 1.9")) {
-                    printBuildOutput()
-                    "Compiler arguments does not contain '-api-version 2.0': $compilationArgs"
-                }
-
-                assert(!compilationArgs.contains("-progressive")) {
-                    printBuildOutput()
-                    "Compiler arguments contains '-progressive': $compilationArgs"
-                }
-
-                assert(compilationArgs.contains("-opt-in another.CustomOptInAnnotation")) {
-                    printBuildOutput()
-                    "Compiler arguments does not contain '-opt-in another.CustomOptInAnnotation': $compilationArgs"
-                }
-
-                assert(compilationArgs.contains("-XXLanguage:+UnitConversionsOnArbitraryExpressions")) {
-                    printBuildOutput()
-                    "Compiler arguments does not contain '-XXLanguage:+UnitConversionsOnArbitraryExpressions': $compilationArgs"
-                }
+                assertNoCompilerArgument(":compileKotlin", "-progressive")
             }
         }
     }
@@ -268,6 +252,58 @@ class CompilerOptionsProjectIT : KGPBaseTest() {
         }
     }
 
+    @DisplayName("KT-59056: freeCompilerArgs are combined with android.kotlinOptions.freeCompilerArgs")
+    @AndroidGradlePluginTests
+    @GradleAndroidTest
+    fun kotlinOptionsFreeCompilerArgs(
+        gradleVersion: GradleVersion,
+        agpVersion: String,
+        jdk: JdkVersions.ProvidedJdk
+    ) {
+        project(
+            "AndroidIncrementalMultiModule",
+            gradleVersion,
+            buildOptions = defaultBuildOptions.copy(
+                androidVersion = agpVersion,
+                logLevel = LogLevel.DEBUG
+            ),
+            buildJdk = jdk.location
+        ) {
+            buildGradle.appendText(
+                //language=groovy
+                """
+                |
+                |subprojects {
+                |    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile.class).configureEach {
+                |        compilerOptions {
+                |            freeCompilerArgs.addAll("-progressive")
+                |        }
+                |    }
+                |}
+                """.trimMargin()
+            )
+
+            subProject("libAndroid").buildGradle.appendText(
+                //language=groovy
+                """
+                |
+                |android {
+                |    kotlinOptions {
+                |        freeCompilerArgs += ["-opt-in=com.example.roo.requiresOpt.FunTests"]
+                |    }
+                |}
+                """.trimMargin()
+            )
+
+            build(":libAndroid:compileDebugKotlin") {
+                assertTasksExecuted(":libAndroid:compileDebugKotlin")
+
+                assertCompilerArgument(":libAndroid:compileDebugKotlin", "-progressive")
+                assertCompilerArgument(":libAndroid:compileDebugKotlin", "-opt-in=com.example.roo.requiresOpt.FunTests")
+            }
+        }
+    }
+
     @DisplayName("KT-57688: task moduleName input overrides project level moduleName")
     @JvmGradlePluginTests
     @GradleTest
@@ -306,6 +342,44 @@ class CompilerOptionsProjectIT : KGPBaseTest() {
                     printBuildOutput()
                     "Compiler arguments does not contain '-module-name otherCustomModuleName': $compilationArgs"
                 }
+            }
+        }
+    }
+
+    @DisplayName("KT-57959: should be possible to configure module name in MPP/android")
+    @GradleAndroidTest
+    @GradleTestVersions(minVersion = TestVersions.Gradle.G_7_0)
+    @AndroidTestVersions(minVersion = TestVersions.AGP.AGP_70)
+    @AndroidGradlePluginTests
+    fun mppAndroidModuleName(
+        gradleVersion: GradleVersion,
+        agpVersion: String,
+        jdk: JdkVersions.ProvidedJdk
+    ) {
+        project(
+            "multiplatformAndroidSourceSetLayout2",
+            gradleVersion,
+            buildOptions = defaultBuildOptions.copy(androidVersion = agpVersion, logLevel = LogLevel.DEBUG),
+            buildJdk = jdk.location
+        ) {
+            buildGradleKts.appendText(
+                //language=kotlin
+                """
+                |
+                |kotlin {
+                |    android {
+                |        compilations.all {
+                |            compilerOptions.options.moduleName.set("last-chance")
+                |        }
+                |    }
+                |}
+                """.trimMargin()
+            )
+
+            build(":compileGermanFreeDebugKotlinAndroid") {
+                assertTasksExecuted(":compileGermanFreeDebugKotlinAndroid")
+
+                assertCompilerArgument(":compileGermanFreeDebugKotlinAndroid", "-module-name last-chance")
             }
         }
     }

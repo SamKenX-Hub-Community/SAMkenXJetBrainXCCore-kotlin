@@ -9,10 +9,22 @@ import org.jetbrains.kotlin.backend.common.overrides.FakeOverrideBuilder
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.ir.util.SymbolTable
 
 interface PartialLinkageSupportForLinker {
     val isEnabled: Boolean
+
+    /**
+     * Fast check to determine if the given [declaration] should be skipped from the partial linkage point of view.
+     *
+     * This check is typically used to avoid processing and patching declarations that came from stdlib or were generated
+     * on the fly by the compiler itself and this way are automatically supposed to be correct.
+     *
+     * Note: There is no need to call [shouldBeSkipped] prior to [exploreClassifiersInInlineLazyIrFunction] and
+     * [generateStubsAndPatchUsages] functions. These function do the same check internally in more optimal way.
+     */
+    fun shouldBeSkipped(declaration: IrDeclaration): Boolean
 
     /**
      * For general use in IR linker.
@@ -37,13 +49,20 @@ interface PartialLinkageSupportForLinker {
     fun generateStubsAndPatchUsages(symbolTable: SymbolTable, roots: () -> Sequence<IrModuleFragment>)
     fun generateStubsAndPatchUsages(symbolTable: SymbolTable, root: IrDeclaration)
 
+    /**
+     * Collect all symbols which were stubbed
+     */
+    fun collectAllStubbedSymbols(): Set<IrSymbol>
+
     companion object {
         val DISABLED = object : PartialLinkageSupportForLinker {
             override val isEnabled get() = false
+            override fun shouldBeSkipped(declaration: IrDeclaration) = true
             override fun exploreClassifiers(fakeOverrideBuilder: FakeOverrideBuilder) = Unit
             override fun exploreClassifiersInInlineLazyIrFunction(function: IrFunction) = Unit
             override fun generateStubsAndPatchUsages(symbolTable: SymbolTable, roots: () -> Sequence<IrModuleFragment>) = Unit
             override fun generateStubsAndPatchUsages(symbolTable: SymbolTable, root: IrDeclaration) = Unit
+            override fun collectAllStubbedSymbols(): Set<IrSymbol> = emptySet()
         }
     }
 }

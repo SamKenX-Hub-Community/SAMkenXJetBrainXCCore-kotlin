@@ -12,10 +12,10 @@ import org.jetbrains.kotlin.gradle.report.BuildReportType
 import org.jetbrains.kotlin.gradle.testbase.*
 import org.junit.jupiter.api.DisplayName
 import java.io.ObjectInputStream
+import java.nio.file.Path
 import kotlin.io.path.*
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 @DisplayName("Build reports")
 @JvmGradlePluginTests
@@ -25,7 +25,15 @@ class BuildReportsIT : KGPBaseTest() {
             buildReport = listOf(BuildReportType.FILE)
         )
 
+    private val GradleProject.reportFile: Path
+        get() = projectPath.getSingleFileInDir("build/reports/kotlin-build")
+
     @DisplayName("Build report is created")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
     @GradleTest
     fun testBuildReportSmokeTest(gradleVersion: GradleVersion) {
         project("simpleProject", gradleVersion) {
@@ -40,6 +48,11 @@ class BuildReportsIT : KGPBaseTest() {
     }
 
     @DisplayName("Build report output property accepts only certain values")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
     @GradleTest
     fun testBuildReportOutputProperty(gradleVersion: GradleVersion) {
         project("simpleProject", gradleVersion) {
@@ -50,54 +63,137 @@ class BuildReportsIT : KGPBaseTest() {
     }
 
     @DisplayName("Build metrics produces valid report")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
     @GradleTest
     fun testBuildMetricsSmokeTest(gradleVersion: GradleVersion) {
-        project("simpleProject", gradleVersion) {
-            build("assemble") {
+        testBuildReportInFile("simpleProject", "assemble", gradleVersion)
+    }
+
+    @DisplayName("Build metrics produces valid report for mpp-jvm")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
+    @GradleTest
+    fun testBuildMetricsForMppJvm(gradleVersion: GradleVersion) {
+        testBuildReportInFile("mppJvmWithJava", "assemble", gradleVersion)
+    }
+
+    @DisplayName("Build metrics produces valid report for mpp-js")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
+    @GradleTest
+    fun testBuildMetricsForMppJs(gradleVersion: GradleVersion) {
+        testBuildReportInFile("kotlin-js-package-module-name", "assemble", gradleVersion)
+    }
+
+    @DisplayName("Build metrics produces valid report for JS project")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
+    @GradleTest
+    fun testBuildMetricsForJsProject(gradleVersion: GradleVersion) {
+        testBuildReportInFile("kotlin-js-plugin-project", "compileKotlinJs", gradleVersion,
+                              languageVersion = KotlinVersion.KOTLIN_1_7.version)
+    }
+
+    private fun testBuildReportInFile(project: String, task: String, gradleVersion: GradleVersion,
+                                      languageVersion: String = KotlinVersion.KOTLIN_2_0.version) {
+        project(project, gradleVersion) {
+            build(task) {
                 assertBuildReportPathIsPrinted()
             }
-            val reportFolder = projectPath.resolve("build/reports/kotlin-build").toFile()
-            val reports = reportFolder.listFiles()
-            assertNotNull(reports)
-            assertEquals(1, reports.size)
-            val report = reports[0].readText()
-
             //Should contains build metrics for all compile kotlin tasks
-            assertTrue { report.contains("Time metrics:") }
-            assertTrue { report.contains("Run compilation:") }
-            assertTrue { report.contains("Incremental compilation in daemon:") }
-            assertTrue { report.contains("Size metrics:") }
-            assertTrue { report.contains("Total size of the cache directory:") }
-            assertTrue { report.contains("Total compiler iteration:") }
-            assertTrue { report.contains("ABI snapshot size:") }
-            //for non-incremental builds
-            assertTrue { report.contains("Build attributes:") }
-            assertTrue { report.contains("REBUILD_REASON:") }
-            //gc metrics
-            assertTrue {report.contains("GC count:")}
-            assertTrue {report.contains("GC time:")}
+            validateBuildReportFile(KotlinVersion.DEFAULT.version)
+        }
+
+        project(project, gradleVersion, buildOptions = defaultBuildOptions.copy(languageVersion = languageVersion)) {
+            build(task, buildOptions = buildOptions.copy(languageVersion = languageVersion)) {
+                assertBuildReportPathIsPrinted()
+            }
+            //Should contains build metrics for all compile kotlin tasks
+            validateBuildReportFile(languageVersion)
         }
     }
 
+    private fun TestProject.validateBuildReportFile(kotlinLanguageVersion: String) {
+        assertFileContains(
+            reportFile,
+            "Time metrics:",
+            "Run compilation:",
+            "Incremental compilation in daemon:",
+            "Size metrics:",
+            "Total size of the cache directory:",
+            "Total compiler iteration:",
+            "ABI snapshot size:",
+            //for non-incremental builds
+            "Build attributes:",
+            "REBUILD_REASON:",
+            //gc metrics
+            "GC count:",
+            "GC time:",
+            //task info
+            "Task info:",
+            "Kotlin language version: $kotlinLanguageVersion",
+        )
+    }
+
     @DisplayName("Compiler build metrics report is produced")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
     @GradleTest
     fun testCompilerBuildMetricsSmokeTest(gradleVersion: GradleVersion) {
         project("simpleProject", gradleVersion) {
             build("assemble") {
                 assertBuildReportPathIsPrinted()
             }
-            val reportFolder = projectPath.resolve("build/reports/kotlin-build").toFile()
-            val reports = reportFolder.listFiles()
-            assertNotNull(reports)
-            assertEquals(1, reports.size)
-            val report = reports[0].readText()
-            assertTrue { report.contains("Compiler code analysis:") }
-            assertTrue { report.contains("Compiler code generation:") }
-            assertTrue { report.contains("Compiler initialization time:") }
+            assertFileContains(
+                reportFile,
+                "Compiler code analysis:",
+                "Compiler code generation:",
+                "Compiler initialization time:",
+            )
+        }
+    }
+
+    @DisplayName("with no kotlin task executed")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
+    @GradleTest
+    fun testFileReportWithoutKotlinTask(gradleVersion: GradleVersion) {
+        project("simpleProject", gradleVersion) {
+            build("assemble", "--dry-run") {
+                assertBuildReportPathIsPrinted()
+            }
+            assertFileContains(
+                reportFile,
+                "No Kotlin task was run",
+            )
         }
     }
 
     @DisplayName("validation")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
     @GradleTest
     fun testSingleBuildMetricsFileValidation(gradleVersion: GradleVersion) {
         project("simpleProject", gradleVersion) {
@@ -110,6 +206,11 @@ class BuildReportsIT : KGPBaseTest() {
     }
 
     @DisplayName("deprecated property")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
     @GradleTest
     fun testDeprecatedAndNewSingleBuildMetricsFile(gradleVersion: GradleVersion) {
         project("simpleProject", gradleVersion) {
@@ -125,6 +226,11 @@ class BuildReportsIT : KGPBaseTest() {
     }
 
     @DisplayName("smoke")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
     @GradleTest
     fun testSingleBuildMetricsFileSmoke(gradleVersion: GradleVersion) {
         project("simpleProject", gradleVersion) {
@@ -144,6 +250,11 @@ class BuildReportsIT : KGPBaseTest() {
     }
 
     @DisplayName("custom value limit")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
     @GradleTest
     fun testCustomValueLimitForBuildScan(gradleVersion: GradleVersion) {
         project("simpleProject", gradleVersion, buildOptions = defaultBuildOptions.copy(logLevel = LogLevel.DEBUG)) {
@@ -159,6 +270,11 @@ class BuildReportsIT : KGPBaseTest() {
     }
 
     @DisplayName("build scan listener lazy initialisation")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
     @GradleTest
     fun testBuildScanListenerLazyInitialisation(gradleVersion: GradleVersion) {
         project("simpleProject", gradleVersion, buildOptions = defaultBuildOptions.copy(logLevel = LogLevel.DEBUG)) {
@@ -175,23 +291,30 @@ class BuildReportsIT : KGPBaseTest() {
     private val kotlinErrorPath = ".gradle/kotlin/errors"
 
     @DisplayName("Error file is created")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
     @GradleTest
     fun testErrorsFileSmokeTest(gradleVersion: GradleVersion) {
         project("simpleProject", gradleVersion) {
 
             val lookupsTab = projectPath.resolve("build/kotlin/compileKotlin/cacheable/caches-jvm/lookups/lookups.tab")
-            buildGradle.appendText("""
-                tasks.named("compileKotlin") {
-                    doLast {
-                        new File("${lookupsTab.toUri().path}").write("Invalid contents")
+            buildGradle.appendText(
+                """
+                    tasks.named("compileKotlin") {
+                        doLast {
+                            new File("${lookupsTab.toUri().path}").write("Invalid contents")
+                        }
                     }
-                }
-            """.trimIndent())
+                """.trimIndent()
+            )
             build("compileKotlin") {
                 assertTrue { projectPath.resolve(kotlinErrorPath).listDirectoryEntries().isEmpty() }
             }
             val kotlinFile = kotlinSourcesDir().resolve("helloWorld.kt")
-            kotlinFile.modify { it.replace("ArrayList","skjfghsjk") }
+            kotlinFile.modify { it.replace("ArrayList", "skjfghsjk") }
             buildAndFail("compileKotlin") {
                 val buildErrorDir = projectPath.resolve(kotlinErrorPath).toFile()
                 val files = buildErrorDir.listFiles()
@@ -212,6 +335,11 @@ class BuildReportsIT : KGPBaseTest() {
     }
 
     @DisplayName("Error file should not contain compilation exceptions")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
     @GradleTest
     fun testErrorsFileWithCompilationError(gradleVersion: GradleVersion) {
         project("simpleProject", gradleVersion) {
@@ -219,7 +347,7 @@ class BuildReportsIT : KGPBaseTest() {
                 assertTrue { projectPath.resolve(kotlinErrorPath).listDirectoryEntries().isEmpty() }
             }
             val kotlinFile = kotlinSourcesDir().resolve("helloWorld.kt")
-            kotlinFile.modify { it.replace("ArrayList","skjfghsjk") }
+            kotlinFile.modify { it.replace("ArrayList", "skjfghsjk") }
             buildAndFail("compileKotlin") {
                 assertTrue { projectPath.resolve(kotlinErrorPath).listDirectoryEntries().isEmpty() }
             }
@@ -227,6 +355,11 @@ class BuildReportsIT : KGPBaseTest() {
     }
 
     @DisplayName("build scan metrics validation")
+    @GradleTestVersions(
+        minVersion = TestVersions.Gradle.MIN_SUPPORTED,
+        additionalVersions = [TestVersions.Gradle.G_7_6, TestVersions.Gradle.G_8_0],
+        maxVersion = TestVersions.Gradle.G_8_1
+    )
     @GradleTest
     fun testBuildScanMetricsValidation(gradleVersion: GradleVersion) {
         project("simpleProject", gradleVersion) {

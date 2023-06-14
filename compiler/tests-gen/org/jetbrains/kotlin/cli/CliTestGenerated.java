@@ -595,6 +595,16 @@ public class CliTestGenerated extends AbstractCliTest {
             runTest("compiler/testData/cli/jvm/flagAllowingResultAsReturnType.args");
         }
 
+        @TestMetadata("forbidKotlinPackageK1.args")
+        public void testForbidKotlinPackageK1() throws Exception {
+            runTest("compiler/testData/cli/jvm/forbidKotlinPackageK1.args");
+        }
+
+        @TestMetadata("forbidKotlinPackageK2.args")
+        public void testForbidKotlinPackageK2() throws Exception {
+            runTest("compiler/testData/cli/jvm/forbidKotlinPackageK2.args");
+        }
+
         @TestMetadata("functionReferenceWithDefaultValuesFeatureIsEnabledWithNewInference.args")
         public void testFunctionReferenceWithDefaultValuesFeatureIsEnabledWithNewInference() throws Exception {
             runTest("compiler/testData/cli/jvm/functionReferenceWithDefaultValuesFeatureIsEnabledWithNewInference.args");
@@ -618,11 +628,6 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("inlineCycle.args")
         public void testInlineCycle() throws Exception {
             runTest("compiler/testData/cli/jvm/inlineCycle.args");
-        }
-
-        @TestMetadata("inlineCycle_ir.args")
-        public void testInlineCycle_ir() throws Exception {
-            runTest("compiler/testData/cli/jvm/inlineCycle_ir.args");
         }
 
         @TestMetadata("instanceAccessBeforeSuperCall.args")
@@ -683,11 +688,6 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("invalidMetadataVersion.args")
         public void testInvalidMetadataVersion() throws Exception {
             runTest("compiler/testData/cli/jvm/invalidMetadataVersion.args");
-        }
-
-        @TestMetadata("irSupported.args")
-        public void testIrSupported() throws Exception {
-            runTest("compiler/testData/cli/jvm/irSupported.args");
         }
 
         @TestMetadata("javaSealedClass.args")
@@ -835,29 +835,9 @@ public class CliTestGenerated extends AbstractCliTest {
             runTest("compiler/testData/cli/jvm/jvm8Target.args");
         }
 
-        @TestMetadata("jvmDefaultAll.args")
-        public void testJvmDefaultAll() throws Exception {
-            runTest("compiler/testData/cli/jvm/jvmDefaultAll.args");
-        }
-
-        @TestMetadata("jvmDefaultCompatibility.args")
-        public void testJvmDefaultCompatibility() throws Exception {
-            runTest("compiler/testData/cli/jvm/jvmDefaultCompatibility.args");
-        }
-
-        @TestMetadata("jvmDefaultEnable.args")
-        public void testJvmDefaultEnable() throws Exception {
-            runTest("compiler/testData/cli/jvm/jvmDefaultEnable.args");
-        }
-
-        @TestMetadata("jvmIrByDefault1_4.args")
-        public void testJvmIrByDefault1_4() throws Exception {
-            runTest("compiler/testData/cli/jvm/jvmIrByDefault1_4.args");
-        }
-
-        @TestMetadata("jvmIrByDefault1_5.args")
-        public void testJvmIrByDefault1_5() throws Exception {
-            runTest("compiler/testData/cli/jvm/jvmIrByDefault1_5.args");
+        @TestMetadata("jvmDefaultIncorrectValue.args")
+        public void testJvmDefaultIncorrectValue() throws Exception {
+            runTest("compiler/testData/cli/jvm/jvmDefaultIncorrectValue.args");
         }
 
         @TestMetadata("jvmRecordOk.args")
@@ -868,6 +848,11 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("jvmRecordWrongTarget.args")
         public void testJvmRecordWrongTarget() throws Exception {
             runTest("compiler/testData/cli/jvm/jvmRecordWrongTarget.args");
+        }
+
+        @TestMetadata("k2SimpleMultiplatformGenericClass.args")
+        public void testK2SimpleMultiplatformGenericClass() throws Exception {
+            runTest("compiler/testData/cli/jvm/k2SimpleMultiplatformGenericClass.args");
         }
 
         @TestMetadata("kotlinHomeWithoutStdlib.args")
@@ -1008,11 +993,6 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("nonLocalDisabled.args")
         public void testNonLocalDisabled() throws Exception {
             runTest("compiler/testData/cli/jvm/nonLocalDisabled.args");
-        }
-
-        @TestMetadata("nonLocalDisabled_ir.args")
-        public void testNonLocalDisabled_ir() throws Exception {
-            runTest("compiler/testData/cli/jvm/nonLocalDisabled_ir.args");
         }
 
         @TestMetadata("nonexistentPathInModule.args")
@@ -1323,6 +1303,11 @@ public class CliTestGenerated extends AbstractCliTest {
             runTest("compiler/testData/cli/js/fir.args");
         }
 
+        @TestMetadata("firLightTreeOn.args")
+        public void testFirLightTreeOn() throws Exception {
+            runTest("compiler/testData/cli/js/firLightTreeOn.args");
+        }
+
         @TestMetadata("firMpp.args")
         public void testFirMpp() throws Exception {
             runTest("compiler/testData/cli/js/firMpp.args");
@@ -1622,6 +1607,11 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("kotlinPackageWithFir.args")
         public void testKotlinPackageWithFir() throws Exception {
             runTest("compiler/testData/cli/metadata/kotlinPackageWithFir.args");
+        }
+
+        @TestMetadata("kt58139.args")
+        public void testKt58139() throws Exception {
+            runTest("compiler/testData/cli/metadata/kt58139.args");
         }
 
         @TestMetadata("lambdaWithReceiver.args")

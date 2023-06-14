@@ -14,17 +14,20 @@ import org.gradle.api.provider.ProviderFactory
 import org.gradle.api.tasks.TaskProvider
 import org.jetbrains.kotlin.compilerRunner.CompilerSystemPropertiesService
 import org.jetbrains.kotlin.compilerRunner.GradleCompilerRunner
+import org.jetbrains.kotlin.gradle.dsl.ExplicitApiMode
 import org.jetbrains.kotlin.gradle.dsl.KotlinTopLevelExtension
 import org.jetbrains.kotlin.gradle.dsl.topLevelExtension
 import org.jetbrains.kotlin.gradle.incremental.IncrementalModuleInfoBuildService
+import org.jetbrains.kotlin.gradle.internal.ClassLoadersCachingBuildService
 import org.jetbrains.kotlin.gradle.internal.KaptGenerateStubsTask
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.plugin.PropertiesProvider.Companion.kotlinPropertiesProvider
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJvmAndroidCompilation
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinMetadataTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.associateWithClosure
 import org.jetbrains.kotlin.gradle.plugin.mpp.internal
 import org.jetbrains.kotlin.gradle.plugin.sources.applyLanguageSettingsToCompilerOptions
 import org.jetbrains.kotlin.gradle.report.BuildMetricsService
-import org.jetbrains.kotlin.gradle.report.BuildReportsService
 import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompile
 import org.jetbrains.kotlin.gradle.tasks.KOTLIN_BUILD_DIR_NAME
 import org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile
@@ -45,7 +48,7 @@ internal abstract class AbstractKotlinCompileConfig<TASK : AbstractKotlinCompile
 
     init {
         configureTaskProvider { taskProvider ->
-            project.runOnceAfterEvaluated("apply properties and language settings to ${taskProvider.name}") {
+            project.launchInStage(KotlinPluginLifecycle.Stage.AfterFinaliseCompilations) {
                 taskProvider.configure {
                     // KaptGenerateStubs will receive value from linked KotlinCompile task
                     if (it is KaptGenerateStubsTask) return@configure
@@ -53,9 +56,6 @@ internal abstract class AbstractKotlinCompileConfig<TASK : AbstractKotlinCompile
                     applyLanguageSettingsToCompilerOptions(
                         languageSettings.get(),
                         (it as org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>).compilerOptions,
-                        // KotlinJsIrTarget and KotlinJsIrTargetConfigurator add additional freeCompilerArgs essentially
-                        // always overwriting convention value
-                        addFreeCompilerArgsAsConvention = it !is Kotlin2JsCompile
                     )
                 }
             }
@@ -63,12 +63,12 @@ internal abstract class AbstractKotlinCompileConfig<TASK : AbstractKotlinCompile
 
         val compilerSystemPropertiesService = CompilerSystemPropertiesService.registerIfAbsent(project)
         val buildMetricsService = BuildMetricsService.registerIfAbsent(project)
-        val buildReportsService = buildMetricsService?.let { BuildReportsService.registerIfAbsent(project, buildMetricsService) }
         val incrementalModuleInfoProvider =
             IncrementalModuleInfoBuildService.registerIfAbsent(project, objectFactory.providerWithLazyConvention {
                 GradleCompilerRunner.buildModulesInfo(project.gradle)
             })
         val buildFinishedListenerService = BuildFinishedListenerService.registerIfAbsent(project)
+        val cachedClassLoadersService = ClassLoadersCachingBuildService.registerIfAbsent(project)
         configureTask { task ->
             val propertiesProvider = project.kotlinPropertiesProvider
 
@@ -82,9 +82,6 @@ internal abstract class AbstractKotlinCompileConfig<TASK : AbstractKotlinCompile
             task.localStateDirectories.from(task.taskBuildLocalStateDirectory).disallowChanges()
             buildMetricsService?.also { metricsService ->
                 task.buildMetricsService.value(metricsService).disallowChanges()
-                buildReportsService?.also { reportsService ->
-                    task.buildReportsService.value(reportsService).disallowChanges()
-                }
             }
             task.systemPropertiesService.value(compilerSystemPropertiesService).disallowChanges()
             task.incrementalModuleInfoProvider.value(incrementalModuleInfoProvider).disallowChanges()
@@ -122,6 +119,12 @@ internal abstract class AbstractKotlinCompileConfig<TASK : AbstractKotlinCompile
             if (propertiesProvider.useK2 == true) {
                 task.compilerOptions.useK2.value(true)
             }
+            task.runViaBuildToolsApi.convention(propertiesProvider.runKotlinCompilerViaBuildToolsApi).finalizeValueOnRead()
+            task.classLoadersCachingService.value(cachedClassLoadersService).disallowChanges()
+
+            task.explicitApiMode
+                .value(project.providers.provider { ext.explicitApi })
+                .finalizeValueOnRead()
         }
     }
 
@@ -159,6 +162,28 @@ internal abstract class AbstractKotlinCompileConfig<TASK : AbstractKotlinCompile
                     }
                 }
             )
+
+            task.explicitApiMode
+                .value(
+                    project.providers.provider {
+                        // Plugin explicitly does not configures 'explicitApi' mode for test sources
+                        // compilation, as test sources are not published
+                        val compilation = compilationInfo.tcsOrNull?.compilation
+                        val isCommonCompilation = compilation?.target is KotlinMetadataTarget
+
+                        val androidCompilation = compilationInfo.tcsOrNull?.compilation as? KotlinJvmAndroidCompilation
+                        val isMainAndroidCompilation = androidCompilation?.let {
+                            getTestedVariantData(it.androidVariant) == null
+                        } ?: false
+
+                        if (compilationInfo.isMain || isCommonCompilation || isMainAndroidCompilation) {
+                            ext.explicitApi
+                        } else {
+                            ExplicitApiMode.Disabled
+                        }
+                    }
+                )
+                .finalizeValueOnRead()
         }
     }
 }

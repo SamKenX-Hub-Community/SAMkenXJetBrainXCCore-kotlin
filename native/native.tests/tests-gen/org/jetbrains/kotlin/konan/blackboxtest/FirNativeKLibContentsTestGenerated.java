@@ -20,8 +20,7 @@ import java.util.regex.Pattern;
 @SuppressWarnings("all")
 @TestMetadata("native/native.tests/testData/klibContents")
 @TestDataPath("$PROJECT_ROOT")
-@Tag("k2libContents")
-@Tag("firKlibContents")
+@Tag("frontend-fir")
 @FirPipeline()
 public class FirNativeKLibContentsTestGenerated extends AbstractNativeKlibContentsTest {
     @Test
@@ -39,6 +38,12 @@ public class FirNativeKLibContentsTestGenerated extends AbstractNativeKlibConten
     @TestMetadata("annotations_source_retention.kt")
     public void testAnnotations_source_retention() throws Exception {
         runTest("native/native.tests/testData/klibContents/annotations_source_retention.kt");
+    }
+
+    @Test
+    @TestMetadata("data_class.kt")
+    public void testData_class() throws Exception {
+        runTest("native/native.tests/testData/klibContents/data_class.kt");
     }
 
     @Test
@@ -68,8 +73,7 @@ public class FirNativeKLibContentsTestGenerated extends AbstractNativeKlibConten
     @Nested
     @TestMetadata("native/native.tests/testData/klibContents/builtinsSerializer")
     @TestDataPath("$PROJECT_ROOT")
-    @Tag("k2libContents")
-    @Tag("firKlibContents")
+    @Tag("frontend-fir")
     @FirPipeline()
     public class BuiltinsSerializer {
         @Test
@@ -140,8 +144,7 @@ public class FirNativeKLibContentsTestGenerated extends AbstractNativeKlibConten
         @Nested
         @TestMetadata("native/native.tests/testData/klibContents/builtinsSerializer/annotationArguments")
         @TestDataPath("$PROJECT_ROOT")
-        @Tag("k2libContents")
-        @Tag("firKlibContents")
+        @Tag("frontend-fir")
         @FirPipeline()
         public class AnnotationArguments {
             @Test
@@ -190,8 +193,7 @@ public class FirNativeKLibContentsTestGenerated extends AbstractNativeKlibConten
     @Nested
     @TestMetadata("native/native.tests/testData/klibContents/klib")
     @TestDataPath("$PROJECT_ROOT")
-    @Tag("k2libContents")
-    @Tag("firKlibContents")
+    @Tag("frontend-fir")
     @FirPipeline()
     public class Klib {
         @Test

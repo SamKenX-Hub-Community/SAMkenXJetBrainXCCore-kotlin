@@ -310,6 +310,14 @@ object PositioningStrategies {
         ModifierSetBasedPositioningStrategy(KtTokens.TAILREC_KEYWORD)
 
     @JvmField
+    val EXTERNAL_MODIFIER: PositioningStrategy<KtModifierListOwner> =
+        ModifierSetBasedPositioningStrategy(KtTokens.EXTERNAL_KEYWORD)
+
+    @JvmField
+    val EXPECT_ACTUAL_MODIFIER: PositioningStrategy<KtModifierListOwner> =
+        ModifierSetBasedPositioningStrategy(KtTokens.EXPECT_KEYWORD, KtTokens.ACTUAL_KEYWORD)
+
+    @JvmField
     val OBJECT_KEYWORD: PositioningStrategy<KtObjectDeclaration> = object : PositioningStrategy<KtObjectDeclaration>() {
         override fun mark(element: KtObjectDeclaration): List<TextRange> {
             return markElement(element.getObjectKeyword() ?: element)
@@ -921,9 +929,13 @@ object PositioningStrategies {
     val REIFIED_MODIFIER: PositioningStrategy<KtModifierListOwner> =
         ModifierSetBasedPositioningStrategy(KtTokens.REIFIED_KEYWORD)
 
-    val PROPERTY_INITIALIZER: PositioningStrategy<KtProperty> = object : PositioningStrategy<KtProperty>() {
-        override fun mark(element: KtProperty): List<TextRange> {
-            return markElement(element.initializer ?: element)
+    val PROPERTY_INITIALIZER: PositioningStrategy<KtNamedDeclaration> = object : PositioningStrategy<KtNamedDeclaration>() {
+        override fun mark(element: KtNamedDeclaration): List<TextRange> {
+            return markElement(when (element) {
+                is KtProperty -> element.initializer ?: element
+                is KtParameter -> element.typeReference ?: element
+                else -> element
+            })
         }
     }
 

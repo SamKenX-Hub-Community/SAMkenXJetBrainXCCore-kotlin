@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.fir.plugin.services.PluginAnnotationsProvider
 import org.jetbrains.kotlin.test.builders.TestConfigurationBuilder
 import org.jetbrains.kotlin.test.directives.FirDiagnosticsDirectives.ENABLE_PLUGIN_PHASES
 import org.jetbrains.kotlin.test.directives.FirDiagnosticsDirectives.FIR_DUMP
+import org.jetbrains.kotlin.test.runners.AbstractFirLoadK2CompiledJvmKotlinTest
 import org.jetbrains.kotlin.test.runners.AbstractFirPsiDiagnosticTest
 import org.jetbrains.kotlin.test.runners.codegen.AbstractFirLightTreeBlackBoxCodegenTest
 import org.jetbrains.kotlin.test.runners.enableLazyResolvePhaseChecking
@@ -22,6 +23,13 @@ open class AbstractFirLightTreePluginBlackBoxCodegenTest : AbstractFirLightTreeB
 }
 
 abstract class AbstractFirPsiPluginDiagnosticTest : AbstractFirPsiDiagnosticTest() {
+    override fun configure(builder: TestConfigurationBuilder) {
+        super.configure(builder)
+        builder.commonFirWithPluginFrontendConfiguration()
+    }
+}
+
+open class AbstractFirLoadK2CompiledWithPluginJvmKotlinTest : AbstractFirLoadK2CompiledJvmKotlinTest() {
     override fun configure(builder: TestConfigurationBuilder) {
         super.configure(builder)
         builder.commonFirWithPluginFrontendConfiguration()

@@ -26,7 +26,9 @@ public:
         FLAGS_FROZEN = 0,
         FLAGS_NEVER_FROZEN = 1,
         FLAGS_IN_FINALIZER_QUEUE = 2,
-        FLAGS_FINALIZED = 3,
+        FLAGS_SWEEPABLE = 3,
+        FLAGS_RELEASE_ON_MAIN_QUEUE = 4,
+        FLAGS_FINALIZED = 5,
     };
 
     static constexpr unsigned WEAK_REF_TAG = 1;
@@ -42,11 +44,13 @@ public:
 
     static ExtraObjectData& Install(ObjHeader* object) noexcept;
     void Uninstall() noexcept;
+    void UnlinkFromBaseObject() noexcept;
 
 #ifdef KONAN_OBJC_INTEROP
     std::atomic<void*>& AssociatedObject() noexcept { return associatedObject_; }
 #endif
     bool HasAssociatedObject() noexcept;
+    void ReleaseAssociatedObject() noexcept;
 
     bool getFlag(Flags value) noexcept { return (flags_.load() & (1u << static_cast<uint32_t>(value))) != 0; }
     void setFlag(Flags value) noexcept { flags_.fetch_or(1u << static_cast<uint32_t>(value)); }

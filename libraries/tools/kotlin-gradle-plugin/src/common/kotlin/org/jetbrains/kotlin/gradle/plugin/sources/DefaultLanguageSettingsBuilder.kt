@@ -11,8 +11,10 @@ import org.gradle.api.provider.Provider
 import org.jetbrains.kotlin.config.ApiVersion
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersion
+import org.jetbrains.kotlin.gradle.dsl.ExplicitApiMode
 import org.jetbrains.kotlin.gradle.dsl.KotlinCommonCompilerOptions
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
+import org.jetbrains.kotlin.gradle.dsl.toCompilerValue
 import org.jetbrains.kotlin.gradle.plugin.LanguageSettingsBuilder
 import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompile
 import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompileTool
@@ -99,14 +101,23 @@ internal class DefaultLanguageSettingsBuilder : LanguageSettingsBuilder {
 
     var freeCompilerArgsProvider: Provider<List<String>>? = null
 
-    val freeCompilerArgs: List<String>
+    // Kept here for compatibility with IDEA Kotlin import. It relies on explicit api argument in `freeCompilerArgs` to enable related
+    // inspections
+    internal var explicitApi: Provider<String>? = null
+
+    internal val freeCompilerArgsForNonImport: List<String>
         get() = freeCompilerArgsProvider?.get().orEmpty()
+
+    val freeCompilerArgs: List<String>
+        get() = freeCompilerArgsProvider?.get()
+            .orEmpty()
+            .plus(explicitApi?.orNull)
+            .filterNotNull()
 }
 
 internal fun applyLanguageSettingsToCompilerOptions(
     languageSettingsBuilder: LanguageSettings,
     compilerOptions: KotlinCommonCompilerOptions,
-    addFreeCompilerArgsAsConvention: Boolean = true,
 ) = with(compilerOptions) {
     val languageSettingsBuilderDefault = languageSettingsBuilder as DefaultLanguageSettingsBuilder
     languageSettingsBuilderDefault.languageVersion?.let {
@@ -124,14 +135,10 @@ internal fun applyLanguageSettingsToCompilerOptions(
     languageSettingsBuilder.enabledLanguageFeatures.forEach { featureName ->
         freeArgs.add("-XXLanguage:+$featureName")
     }
-    freeArgs.addAll(languageSettingsBuilderDefault.freeCompilerArgs)
+    freeArgs.addAll(languageSettingsBuilderDefault.freeCompilerArgsForNonImport)
 
     if (freeArgs.isNotEmpty()) {
-        if (addFreeCompilerArgsAsConvention) {
-            freeCompilerArgs.convention(freeArgs)
-        } else {
-            freeCompilerArgs.addAll(freeArgs)
-        }
+        freeCompilerArgs.addAll(freeArgs)
     }
 }
 

@@ -5,6 +5,9 @@
 
 package org.jetbrains.kotlin.resolve.multiplatform
 
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.contract
+
 sealed class ExpectActualCompatibility<out D> {
     // For IncompatibilityKind.STRONG `actual` declaration is considered as overload and error reports on expected declaration
     enum class IncompatibilityKind {
@@ -50,7 +53,7 @@ sealed class ExpectActualCompatibility<out D> {
 
         object FunctionModifiersDifferent : Incompatible<Nothing>("modifiers are different (suspend)")
         object FunctionModifiersNotSubset : Incompatible<Nothing>(
-            "some modifiers on expected declaration are missing on the actual one (external, infix, inline, operator, tailrec)"
+            "some modifiers on expected declaration are missing on the actual one (infix, inline, operator)"
         )
 
         // Properties
@@ -95,3 +98,11 @@ sealed class ExpectActualCompatibility<out D> {
 
 val ExpectActualCompatibility<*>.compatible: Boolean
     get() = this == ExpectActualCompatibility.Compatible
+
+@OptIn(ExperimentalContracts::class)
+fun ExpectActualCompatibility<*>.isIncompatible(): Boolean {
+    contract {
+        returns(true) implies (this@isIncompatible is ExpectActualCompatibility.Incompatible<*>)
+    }
+    return !compatible
+}

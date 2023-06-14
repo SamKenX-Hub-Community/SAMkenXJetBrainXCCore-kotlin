@@ -956,9 +956,6 @@ val loweringList = listOf<Lowering>(
     validateIrAfterLowering,
 )
 
-// TODO comment? Eliminate ModuleLowering's? Don't filter them here?
-val pirLowerings = loweringList.filter { it is DeclarationLowering || it is BodyLowering } + staticMembersLoweringPhase
-
 val jsPhases = SameTypeNamedCompilerPhase(
     name = "IrModuleLowering",
     description = "IR module lowering",
@@ -1000,12 +997,27 @@ private val es6PrimaryConstructorUsageOptimizationLowering = makeBodyLoweringPha
     prerequisite = setOf(es6BoxParameterOptimization, es6PrimaryConstructorOptimizationLowering)
 )
 
+private val purifyObjectInstanceGetters = makeDeclarationTransformerPhase(
+    ::PurifyObjectInstanceGettersLowering,
+    name = "PurifyObjectInstanceGettersLowering",
+    description = "[Optimization] Make object instance getter functions pure whenever it's possible",
+)
+
+private val inlineObjectsWithPureInitialization = makeBodyLoweringPhase(
+    ::InlineObjectsWithPureInitializationLowering,
+    name = "InlineObjectsWithPureInitializationLowering",
+    description = "[Optimization] Inline object instance fields getters whenever it's possible",
+    prerequisite = setOf(purifyObjectInstanceGetters)
+)
+
 val optimizationLoweringList = listOf<Lowering>(
     es6CollectConstructorsWhichNeedBoxParameterLowering,
     es6CollectPrimaryConstructorsWhichCouldBeOptimizedLowering,
     es6BoxParameterOptimization,
     es6PrimaryConstructorOptimizationLowering,
     es6PrimaryConstructorUsageOptimizationLowering,
+    purifyObjectInstanceGetters,
+    inlineObjectsWithPureInitialization
 )
 
 val jsOptimizationPhases = SameTypeNamedCompilerPhase(

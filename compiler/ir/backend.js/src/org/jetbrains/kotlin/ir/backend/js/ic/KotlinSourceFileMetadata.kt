@@ -84,6 +84,14 @@ fun <T> KotlinSourceFileMap<T>.toMutable(): KotlinSourceFileMutableMap<T> {
     return KotlinSourceFileMutableMap(entries.associateTo(HashMap(entries.size)) { it.key to HashMap(it.value) })
 }
 
+fun <T> KotlinSourceFileMap<T>.combineWith(other: KotlinSourceFileMap<T>): KotlinSourceFileMap<T> {
+    return when {
+        isEmpty() -> other
+        other.isEmpty() -> this
+        else -> toMutable().also { it.copyFilesFrom(other) }
+    }
+}
+
 fun KotlinSourceFileMap<Set<IdSignature>>.flatSignatures(): Set<IdSignature> {
     val allSignatures = hashSetOf<IdSignature>()
     forEachFile { _, _, signatures -> allSignatures += signatures }
@@ -139,7 +147,7 @@ internal enum class ImportedSignaturesState { UNKNOWN, MODIFIED, NON_MODIFIED }
 
 internal class UpdatedDependenciesMetadata(oldMetadata: KotlinSourceFileMetadata) : KotlinSourceFileMetadata() {
     private val oldInverseDependencies = oldMetadata.inverseDependencies
-    private val newExportedSignatures: Set<IdSignature> by lazy { inverseDependencies.flatSignatures() }
+    private val newExportedSignatures: Set<IdSignature> by lazy(LazyThreadSafetyMode.NONE) { inverseDependencies.flatSignatures() }
 
     var importedSignaturesState = ImportedSignaturesState.UNKNOWN
 

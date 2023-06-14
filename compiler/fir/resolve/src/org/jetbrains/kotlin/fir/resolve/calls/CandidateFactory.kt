@@ -6,11 +6,13 @@
 package org.jetbrains.kotlin.fir.resolve.calls
 
 import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
 import org.jetbrains.kotlin.fir.declarations.builder.buildErrorFunction
 import org.jetbrains.kotlin.fir.declarations.builder.buildErrorProperty
+import org.jetbrains.kotlin.fir.declarations.fullyExpandedClass
 import org.jetbrains.kotlin.fir.diagnostics.ConeDiagnostic
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.moduleData
@@ -21,6 +23,7 @@ import org.jetbrains.kotlin.fir.scopes.impl.originalForWrappedIntegerOperator
 import org.jetbrains.kotlin.fir.symbols.FirBasedSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.types.classId
+import org.jetbrains.kotlin.fir.types.coneType
 import org.jetbrains.kotlin.resolve.calls.components.PostponedArgumentsAnalyzerContext
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintStorage
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
@@ -52,8 +55,8 @@ class CandidateFactory private constructor(
         symbol: FirBasedSymbol<*>,
         explicitReceiverKind: ExplicitReceiverKind,
         scope: FirScope?,
-        dispatchReceiverValue: ReceiverValue? = null,
-        givenExtensionReceiverOptions: List<ReceiverValue> = emptyList(),
+        dispatchReceiver: FirExpression? = null,
+        givenExtensionReceiverOptions: List<FirExpression> = emptyList(),
         objectsByName: Boolean = false,
         isFromOriginalTypeInPresenceOfSmartCast: Boolean = false,
     ): Candidate {
@@ -62,7 +65,7 @@ class CandidateFactory private constructor(
 
         val result = Candidate(
             symbol,
-            dispatchReceiverValue,
+            dispatchReceiver,
             givenExtensionReceiverOptions,
             explicitReceiverKind,
             context.inferenceComponents.constraintSystemFactory,
@@ -72,7 +75,7 @@ class CandidateFactory private constructor(
             isFromCompanionObjectTypeScope = when (explicitReceiverKind) {
                 ExplicitReceiverKind.EXTENSION_RECEIVER ->
                     givenExtensionReceiverOptions.singleOrNull().isCandidateFromCompanionObjectTypeScope()
-                ExplicitReceiverKind.DISPATCH_RECEIVER -> dispatchReceiverValue.isCandidateFromCompanionObjectTypeScope()
+                ExplicitReceiverKind.DISPATCH_RECEIVER -> dispatchReceiver.isCandidateFromCompanionObjectTypeScope()
                 // The following cases are not applicable for companion objects.
                 ExplicitReceiverKind.NO_EXPLICIT_RECEIVER, ExplicitReceiverKind.BOTH_RECEIVERS -> false
             },
@@ -86,11 +89,7 @@ class CandidateFactory private constructor(
             if (symbol is FirValueParameterSymbol || symbol is FirPropertySymbol && symbol.isLocal || symbol is FirBackingFieldSymbol) {
                 result.addDiagnostic(Unsupported("References to variables aren't supported yet", callSite.calleeReference.source))
             }
-        } else if (objectsByName &&
-            symbol is FirRegularClassSymbol &&
-            symbol.classKind != ClassKind.OBJECT &&
-            symbol.companionObjectSymbol == null
-        ) {
+        } else if (objectsByName && symbol.isRegularClassWithoutCompanion(callInfo.session)) {
             result.addDiagnostic(NoCompanionObject)
         }
         if (callInfo.origin == FirFunctionCallOrigin.Operator && symbol is FirPropertySymbol) {
@@ -98,6 +97,11 @@ class CandidateFactory private constructor(
             result.addDiagnostic(PropertyAsOperator)
         }
         return result
+    }
+
+    private fun FirBasedSymbol<*>.isRegularClassWithoutCompanion(session: FirSession): Boolean {
+        val referencedClass = (this as? FirClassLikeSymbol<*>)?.fullyExpandedClass(session) ?: return false
+        return referencedClass.classKind != ClassKind.OBJECT && referencedClass.companionObjectSymbol == null
     }
 
     private fun FirBasedSymbol<*>.unwrapIntegerOperatorSymbolIfNeeded(callInfo: CallInfo): FirBasedSymbol<*> {
@@ -112,10 +116,9 @@ class CandidateFactory private constructor(
         }
     }
 
-    private fun ReceiverValue?.isCandidateFromCompanionObjectTypeScope(): Boolean {
-        val expressionReceiverValue = this as? ExpressionReceiverValue ?: return false
-        val resolvedQualifier = (expressionReceiverValue.explicitReceiver as? FirResolvedQualifier) ?: return false
-        val originClassOfCandidate = expressionReceiverValue.type.classId ?: return false
+    private fun FirExpression?.isCandidateFromCompanionObjectTypeScope(): Boolean {
+        val resolvedQualifier = this as? FirResolvedQualifier ?: return false
+        val originClassOfCandidate = this.typeRef.coneType.classId ?: return false
         return (resolvedQualifier.symbol?.fir as? FirRegularClass)?.companionObjectSymbol?.classId == originClassOfCandidate
     }
 
@@ -131,7 +134,7 @@ class CandidateFactory private constructor(
         }
         return Candidate(
             symbol,
-            dispatchReceiverValue = null,
+            dispatchReceiver = null,
             givenExtensionReceiverOptions = emptyList(),
             explicitReceiverKind = ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
             context.inferenceComponents.constraintSystemFactory,

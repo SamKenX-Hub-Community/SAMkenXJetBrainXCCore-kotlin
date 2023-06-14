@@ -37,6 +37,10 @@
         </developer>
     </developers>
 
+    <organization>
+        <name>JetBrains s.r.o.</name>
+    </organization>
+
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project-root>../../..</project-root>
@@ -80,7 +84,6 @@
 
         <module>tools/maven-archetypes</module>
 
-        <module>tools/kotlin-annotation-processing-maven</module>
         <module>tools/kotlin-maven-allopen</module>
         <module>tools/kotlin-maven-noarg</module>
         <module>tools/kotlin-maven-sam-with-receiver</module>
@@ -145,6 +148,11 @@
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>versions-maven-plugin</artifactId>
                     <version>2.13.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-assembly-plugin</artifactId>
+                    <version>3.5.0</version>
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -249,6 +257,26 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.spdx</groupId>
+                <artifactId>spdx-maven-plugin</artifactId>
+                <version>0.6.5</version>
+                <executions>
+                    <execution>
+                        <id>build-spdx</id>
+                        <goals>
+                            <goal>createSPDX</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <spdxDocumentNamespace>https://www.jetbrains.com/spdxdocs/${project.artifactId}-${project.version}</spdxDocumentNamespace>
+                    <creators>
+                        <creator>Organization: JetBrains s.r.o.</creator>
+                    </creators>
+                    <originator>Organization: JetBrains s.r.o.</originator>
+                </configuration>
             </plugin>
         </plugins>
     </build>

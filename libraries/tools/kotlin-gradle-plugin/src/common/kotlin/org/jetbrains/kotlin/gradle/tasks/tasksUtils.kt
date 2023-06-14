@@ -23,13 +23,10 @@ fun throwExceptionIfCompilationFailed(
         ExitCode.INTERNAL_ERROR -> throw FailedCompilationException("Internal compiler error. See log for more details")
         ExitCode.SCRIPT_EXECUTION_ERROR -> throw FailedCompilationException("Script execution error. See log for more details")
         ExitCode.OOM_ERROR -> {
-            var exceptionMessage = "Not enough memory to run compilation."
-            when (executionStrategy) {
-                KotlinCompilerExecutionStrategy.DAEMON ->
-                    exceptionMessage += " Try to increase it via 'gradle.properties':\nkotlin.daemon.jvmargs=-Xmx<size>"
-                KotlinCompilerExecutionStrategy.IN_PROCESS ->
-                    exceptionMessage += " Try to increase it via 'gradle.properties':\norg.gradle.jvmargs=-Xmx<size>"
-                KotlinCompilerExecutionStrategy.OUT_OF_PROCESS -> Unit
+            val exceptionMessage = when (executionStrategy) {
+                KotlinCompilerExecutionStrategy.DAEMON -> kotlinDaemonOOMHelperMessage
+                KotlinCompilerExecutionStrategy.IN_PROCESS -> kotlinInProcessOOMHelperMessage
+                KotlinCompilerExecutionStrategy.OUT_OF_PROCESS -> kotlinOutOfProcessOOMHelperMessage
             }
             throw OOMErrorException(exceptionMessage)
         }
@@ -38,14 +35,33 @@ fun throwExceptionIfCompilationFailed(
     }
 }
 
+internal const val kotlinDaemonOOMHelperMessage = "Not enough memory to run compilation. " +
+        "Try to increase it via 'gradle.properties':\nkotlin.daemon.jvmargs=-Xmx<size>"
+
+internal const val kotlinInProcessOOMHelperMessage = "Not enough memory to run compilation. " +
+        " Try to increase it via 'gradle.properties':\norg.gradle.jvmargs=-Xmx<size>"
+
+internal const val kotlinOutOfProcessOOMHelperMessage = "Not enough memory to run compilation."
+
+private const val kotlinDaemonCrashedMessage =
+    "Connection to the Kotlin daemon has been unexpectedly lost. This might be caused by the daemon being killed by another process or the operating system, or by JVM crash."
+
+internal fun Throwable.hasOOMCause(): Boolean = when (cause) {
+    is OutOfMemoryError -> true
+    else -> cause?.hasOOMCause() ?: false
+}
+
 /** Exception thrown when [ExitCode] != [ExitCode.OK]. */
-internal open class FailedCompilationException(message: String) : RuntimeException(message)
+internal open class FailedCompilationException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
 
 /** Exception thrown when [ExitCode] == [ExitCode.COMPILATION_ERROR]. */
 internal class CompilationErrorException(message: String) : FailedCompilationException(message)
 
 /** Exception thrown when [ExitCode] == [ExitCode.OOM_ERROR]. */
 internal class OOMErrorException(message: String) : FailedCompilationException(message)
+
+/** Exception thrown when during the compilation [java.rmi.RemoteException] is caught */
+internal class DaemonCrashedException(cause: Throwable) : FailedCompilationException(kotlinDaemonCrashedMessage, cause)
 
 internal fun TaskWithLocalState.cleanOutputsAndLocalState(reason: String? = null) {
     val log = GradleKotlinLogger(logger)

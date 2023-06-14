@@ -136,7 +136,8 @@ class FakeOverrideGenerator(
                         session, symbol, firFunction,
                         derivedClassLookupTag = firClass.symbol.toLookupTag(),
                         newDispatchReceiverType = firClass.defaultType(),
-                        isExpect = (firClass as? FirRegularClass)?.isExpect == true
+                        origin = FirDeclarationOrigin.SubstitutionOverride.DeclarationSite,
+                        isExpect = (firClass as? FirRegularClass)?.isExpect == true || firFunction.isExpect
                     )
                 },
                 baseFunctionSymbols,
@@ -164,7 +165,8 @@ class FakeOverrideGenerator(
                                 session, symbolForOverride, firProperty,
                                 derivedClassLookupTag = firClass.symbol.toLookupTag(),
                                 newDispatchReceiverType = firClass.defaultType(),
-                                isExpect = (firClass as? FirRegularClass)?.isExpect == true
+                                origin = FirDeclarationOrigin.SubstitutionOverride.DeclarationSite,
+                                isExpect = (firClass as? FirRegularClass)?.isExpect == true || firProperty.isExpect
                             )
                         },
                         basePropertySymbols,
@@ -192,6 +194,7 @@ class FakeOverrideGenerator(
                                 session, firField,
                                 derivedClassLookupTag = firClass.symbol.toLookupTag(),
                                 newReturnType = firField.returnTypeRef.coneType,
+                                origin = FirDeclarationOrigin.SubstitutionOverride.DeclarationSite,
                             )
                         },
                         baseStaticFieldSymbols,
@@ -344,7 +347,8 @@ class FakeOverrideGenerator(
                 session, callableSymbol, firFunction,
                 derivedClassLookupTag = klass.symbol.toLookupTag(),
                 newDispatchReceiverType = klass.defaultType(),
-                isExpect = (klass as? FirRegularClass)?.isExpect == true
+                origin = FirDeclarationOrigin.SubstitutionOverride.DeclarationSite,
+                isExpect = (klass as? FirRegularClass)?.isExpect == true || firFunction.isExpect
             )
         },
         computeDirectOverridden = FirTypeScope::getDirectOverriddenFunctions,
@@ -363,7 +367,8 @@ class FakeOverrideGenerator(
                 session, callableSymbol, firProperty,
                 derivedClassLookupTag = klass.symbol.toLookupTag(),
                 newDispatchReceiverType = klass.defaultType(),
-                isExpect = (klass as? FirRegularClass)?.isExpect == true
+                origin = FirDeclarationOrigin.SubstitutionOverride.DeclarationSite,
+                isExpect = (klass as? FirRegularClass)?.isExpect == true || firProperty.isExpect
             )
         },
         computeDirectOverridden = FirTypeScope::getDirectOverriddenProperties,
@@ -376,7 +381,7 @@ class FakeOverrideGenerator(
         scope: FirScope,
         containingClass: ConeClassLikeLookupTag,
     ): List<S> {
-        if (symbol.fir.origin == FirDeclarationOrigin.SubstitutionOverride) {
+        if (symbol.fir.origin is FirDeclarationOrigin.SubstitutionOverride) {
             return listOf(symbol.originalForSubstitutionOverride!!)
         }
 

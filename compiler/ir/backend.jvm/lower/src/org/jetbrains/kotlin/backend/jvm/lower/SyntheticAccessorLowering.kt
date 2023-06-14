@@ -80,7 +80,7 @@ internal class SyntheticAccessorLowering(val context: JvmBackendContext) : FileL
 
             val ownerClass = declaration.parent as? IrClass ?: return true // locals are always accessible
             val scopeClassOrPackage = inlineScopeResolver.findContainer(currentScope!!.irElement) ?: return false
-            val samePackage = ownerClass.getPackageFragment().fqName == scopeClassOrPackage.getPackageFragment()?.fqName
+            val samePackage = ownerClass.getPackageFragment().packageFqName == scopeClassOrPackage.getPackageFragment()?.packageFqName
             return when {
                 jvmVisibility == Opcodes.ACC_PRIVATE -> ownerClass == scopeClassOrPackage
                 !withSuper && samePackage && jvmVisibility == 0 /* package only */ -> true
@@ -276,14 +276,12 @@ private class SyntheticAccessorTransformer(
                 accessorGenerator.isOrShouldBeHiddenAsSealedClassConstructor(function) -> accessorGenerator.getSyntheticConstructorOfSealedClass(function)
                 else -> return super.visitFunctionReference(expression)
             }
-            generatedAccessor.symbol.save().owner.let { accessor ->
-                expression.transformChildrenVoid()
-                return IrFunctionReferenceImpl(
-                    expression.startOffset, expression.endOffset, expression.type,
-                    accessor.symbol, accessor.typeParameters.size,
-                    accessor.valueParameters.size, accessor.symbol, expression.origin
-                )
-            }
+            expression.transformChildrenVoid()
+            return IrFunctionReferenceImpl(
+                expression.startOffset, expression.endOffset, expression.type,
+                generatedAccessor.symbol, generatedAccessor.typeParameters.size,
+                generatedAccessor.valueParameters.size, generatedAccessor.symbol, expression.origin
+            )
         }
 
         return super.visitFunctionReference(expression)

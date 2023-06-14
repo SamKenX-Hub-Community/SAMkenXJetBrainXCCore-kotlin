@@ -8,7 +8,9 @@ package org.jetbrains.kotlin.wasm.resolve
 import org.jetbrains.kotlin.container.StorageComponentContainer
 import org.jetbrains.kotlin.container.useImpl
 import org.jetbrains.kotlin.container.useInstance
+import org.jetbrains.kotlin.js.analyze.JsNativeDiagnosticSuppressor
 import org.jetbrains.kotlin.js.naming.NameSuggestion
+import org.jetbrains.kotlin.js.naming.WasmNameSuggestion
 import org.jetbrains.kotlin.js.resolve.ExtensionFunctionToExternalIsInlinable
 import org.jetbrains.kotlin.js.resolve.diagnostics.*
 import org.jetbrains.kotlin.resolve.PlatformConfiguratorBase
@@ -38,10 +40,10 @@ object WasmPlatformConfigurator : PlatformConfiguratorBase(
     ),
 ) {
     override fun configureModuleComponents(container: StorageComponentContainer) {
-        container.useInstance(NameSuggestion())
+        container.useInstance(WasmNameSuggestion())
         container.useImpl<WasmJsCallChecker>()
-        container.useImpl<JsNameClashChecker>()
-        container.useImpl<JsNameCharsChecker>()
+        container.useImpl<WasmNameClashChecker>()
+        container.useImpl<WasmNameCharsChecker>()
         container.useInstance(JsModuleClassLiteralChecker)
         container.useImpl<JsReflectionAPICallChecker>()
         container.useImpl<JsNativeRttiChecker>()

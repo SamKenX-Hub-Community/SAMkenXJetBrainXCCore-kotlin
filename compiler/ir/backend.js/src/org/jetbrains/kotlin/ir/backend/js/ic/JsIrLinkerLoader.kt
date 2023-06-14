@@ -25,9 +25,13 @@ import org.jetbrains.kotlin.ir.declarations.IrFactory
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.descriptors.IrDescriptorBasedFunctionFactory
 import org.jetbrains.kotlin.ir.linkage.partial.partialLinkageConfig
+import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.ir.util.ExternalDependenciesGenerator
+import org.jetbrains.kotlin.ir.util.IdSignature
 import org.jetbrains.kotlin.ir.util.SymbolTable
 import org.jetbrains.kotlin.ir.util.irMessageLogger
+import org.jetbrains.kotlin.js.config.ErrorTolerancePolicy
+import org.jetbrains.kotlin.js.config.JSConfigurationKeys
 import org.jetbrains.kotlin.library.KotlinLibrary
 import org.jetbrains.kotlin.library.uniqueName
 import org.jetbrains.kotlin.library.unresolvedDependencies
@@ -69,8 +73,13 @@ internal data class LoadedJsIr(
     fun loadUnboundSymbols() {
         signatureProvidersImpl.clear()
         ExternalDependenciesGenerator(linker.symbolTable, listOf(linker)).generateUnboundSymbolsAsDependencies()
-        linker.postProcess()
+        linker.postProcess(inOrAfterLinkageStep = true)
         linker.checkNoUnboundSymbols(linker.symbolTable, "at the end of IR linkage process")
+        linker.clear()
+    }
+
+    fun collectSymbolsReplacedWithStubs(): Set<IrSymbol> {
+        return linker.partialLinkageSupport.collectAllStubbedSymbols()
     }
 }
 
@@ -78,7 +87,8 @@ internal class JsIrLinkerLoader(
     private val compilerConfiguration: CompilerConfiguration,
     private val dependencyGraph: Map<KotlinLibrary, List<KotlinLibrary>>,
     private val mainModuleFriends: Collection<KotlinLibrary>,
-    private val irFactory: IrFactory
+    private val irFactory: IrFactory,
+    private val stubbedSignatures: Set<IdSignature>
 ) {
     private val mainLibrary = dependencyGraph.keys.lastOrNull() ?: notFoundIcError("main library")
 
@@ -108,6 +118,7 @@ internal class JsIrLinkerLoader(
         val symbolTable = SymbolTable(signaturer, irFactory)
         val moduleDescriptor = loadedModules.keys.last()
         val typeTranslator = TypeTranslatorImpl(symbolTable, compilerConfiguration.languageVersionSettings, moduleDescriptor)
+        val errorPolicy = compilerConfiguration[JSConfigurationKeys.ERROR_TOLERANCE_POLICY] ?: ErrorTolerancePolicy.DEFAULT
         val irBuiltIns = IrBuiltInsOverDescriptors(moduleDescriptor.builtIns, typeTranslator, symbolTable)
         val messageLogger = compilerConfiguration.irMessageLogger
         val linker = JsIrLinker(
@@ -115,7 +126,12 @@ internal class JsIrLinkerLoader(
             messageLogger = messageLogger,
             builtIns = irBuiltIns,
             symbolTable = symbolTable,
-            partialLinkageSupport = createPartialLinkageSupportForLinker(compilerConfiguration.partialLinkageConfig, irBuiltIns, messageLogger),
+            partialLinkageSupport = createPartialLinkageSupportForLinker(
+                partialLinkageConfig = compilerConfiguration.partialLinkageConfig,
+                allowErrorTypes = errorPolicy.allowErrors,
+                builtIns = irBuiltIns,
+                messageLogger = messageLogger
+            ),
             translationPluginContext = null,
             friendModules = mapOf(mainLibrary.uniqueName to mainModuleFriends.map { it.uniqueName })
         )
@@ -200,6 +216,12 @@ internal class JsIrLinkerLoader(
                         } else if (loadingSignature in moduleDeserializer) {
                             moduleDeserializer.addModuleReachableTopLevel(loadingSignature)
                         }
+                    }
+                }
+
+                for (stubbedSignature in stubbedSignatures) {
+                    if (stubbedSignature in moduleDeserializer) {
+                        moduleDeserializer.addModuleReachableTopLevel(stubbedSignature)
                     }
                 }
             }

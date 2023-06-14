@@ -6,8 +6,6 @@
 package org.jetbrains.kotlin.gradle.dsl
 
 import org.gradle.api.*
-import org.gradle.api.internal.plugins.DslObject
-import org.gradle.api.logging.Logger
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.plugin.KotlinPluginLifecycle.Stage.AfterFinaliseDsl
@@ -39,17 +37,6 @@ abstract class KotlinMultiplatformExtension(project: Project) :
         targets
     )
 
-    init {
-        val presetExtensionWithDeprecation = project.objects.newInstance(
-            TargetsFromPresetExtensionWithDeprecation::class.java,
-            project.logger,
-            project.path,
-            presetExtension
-        )
-        @Suppress("DEPRECATION")
-        DslObject(targets).addConvention("fromPreset", presetExtensionWithDeprecation)
-    }
-
     fun targets(configure: Action<TargetsFromPresetExtension>) {
         configure.execute(presetExtension)
     }
@@ -58,7 +45,9 @@ abstract class KotlinMultiplatformExtension(project: Project) :
         configure(presetExtension)
     }
 
-    internal val internalKotlinTargetHierarchy by lazy { KotlinTargetHierarchyDslImpl(targets, sourceSets) }
+    internal val internalKotlinTargetHierarchy by lazy {
+        KotlinTargetHierarchyDslImpl(targets, sourceSets)
+    }
 
     @ExperimentalKotlinGradlePluginApi
     val targetHierarchy: KotlinTargetHierarchyDsl get() = internalKotlinTargetHierarchy
@@ -80,13 +69,13 @@ abstract class KotlinMultiplatformExtension(project: Project) :
     fun <T : KotlinTarget> targetFromPreset(
         preset: KotlinTargetPreset<T>,
         name: String = preset.name,
-        configure: T.() -> Unit = { }
+        configure: T.() -> Unit = { },
     ): T = configureOrCreate(name, preset, configure)
 
     fun <T : KotlinTarget> targetFromPreset(
         preset: KotlinTargetPreset<T>,
         name: String,
-        configure: Action<T>
+        configure: Action<T>,
     ) = targetFromPreset(preset, name) { configure.execute(this) }
 
     fun <T : KotlinTarget> targetFromPreset(preset: KotlinTargetPreset<T>) = targetFromPreset(preset, preset.name) { }
@@ -104,78 +93,39 @@ interface TargetsFromPresetExtension : NamedDomainObjectCollection<KotlinTarget>
     fun <T : KotlinTarget> fromPreset(
         preset: KotlinTargetPreset<T>,
         name: String,
-        configureAction: T.() -> Unit = {}
+        configureAction: T.() -> Unit = {},
     ): T
 
     fun <T : KotlinTarget> fromPreset(
         preset: KotlinTargetPreset<T>,
-        name: String
+        name: String,
     ): T = fromPreset(preset, name, {})
 
     fun <T : KotlinTarget> fromPreset(
         preset: KotlinTargetPreset<T>,
         name: String,
-        configureAction: Action<T>
+        configureAction: Action<T>,
     ): T
 }
 
 internal abstract class DefaultTargetsFromPresetExtension @Inject constructor(
     private val targetsContainer: () -> KotlinTargetsContainerWithPresets,
-    val targets: NamedDomainObjectCollection<KotlinTarget>
+    val targets: NamedDomainObjectCollection<KotlinTarget>,
 ) : TargetsFromPresetExtension,
     NamedDomainObjectCollection<KotlinTarget> by targets {
 
     override fun <T : KotlinTarget> fromPreset(
         preset: KotlinTargetPreset<T>,
         name: String,
-        configureAction: T.() -> Unit
+        configureAction: T.() -> Unit,
     ): T = targetsContainer().configureOrCreate(name, preset, configureAction)
 
     override fun <T : KotlinTarget> fromPreset(
         preset: KotlinTargetPreset<T>,
         name: String,
-        configureAction: Action<T>
+        configureAction: Action<T>,
     ) = fromPreset(preset, name) {
         configureAction.execute(this)
-    }
-}
-
-internal abstract class TargetsFromPresetExtensionWithDeprecation @Inject constructor(
-    private val logger: Logger,
-    private val projectPath: String,
-    private val parentExtension: DefaultTargetsFromPresetExtension
-) : TargetsFromPresetExtension,
-    NamedDomainObjectCollection<KotlinTarget> by parentExtension.targets {
-
-    override fun <T : KotlinTarget> fromPreset(
-        preset: KotlinTargetPreset<T>,
-        name: String,
-        configureAction: T.() -> Unit
-    ): T {
-        printDeprecationMessage(preset, name)
-        return parentExtension.fromPreset(preset, name, configureAction)
-    }
-
-    override fun <T : KotlinTarget> fromPreset(
-        preset: KotlinTargetPreset<T>,
-        name: String,
-        configureAction: Action<T>
-    ): T {
-        printDeprecationMessage(preset, name)
-        return parentExtension.fromPreset(preset, name, configureAction)
-    }
-
-    private fun <T : KotlinTarget> printDeprecationMessage(
-        preset: KotlinTargetPreset<T>,
-        targetName: String
-    ) {
-        logger.warn(
-            """
-            Creating Kotlin target ${preset.name}:${targetName} via convention 'target.fromPreset()' in $projectPath project is deprecated!"
-            
-            Check https://kotlinlang.org/docs/multiplatform-set-up-targets.html documentation how to create MPP target.
-            """.trimIndent()
-        )
     }
 }
 
@@ -185,7 +135,7 @@ internal fun KotlinTarget.isProducedFromPreset(kotlinTargetPreset: KotlinTargetP
 internal fun <T : KotlinTarget> KotlinTargetsContainerWithPresets.configureOrCreate(
     targetName: String,
     targetPreset: KotlinTargetPreset<T>,
-    configure: T.() -> Unit
+    configure: T.() -> Unit,
 ): T {
     val existingTarget = targets.findByName(targetName)
     when {

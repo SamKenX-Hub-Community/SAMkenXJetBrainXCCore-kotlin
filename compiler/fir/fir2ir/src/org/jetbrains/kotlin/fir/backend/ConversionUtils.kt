@@ -7,7 +7,7 @@ package org.jetbrains.kotlin.fir.backend
 
 import com.intellij.psi.PsiCompiledElement
 import org.jetbrains.kotlin.*
-import org.jetbrains.kotlin.backend.common.actualizer.IrActualizationResult
+import org.jetbrains.kotlin.backend.common.actualizer.IrActualizedResult
 import org.jetbrains.kotlin.builtins.StandardNames.DATA_CLASS_COMPONENT_PREFIX
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.diagnostics.startOffsetSkippingComments
@@ -63,7 +63,7 @@ import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.util.OperatorNameConventions
 import org.jetbrains.kotlin.utils.addToStdlib.runIf
 
-private fun AbstractKtSourceElement?.startOffsetSkippingComments(): Int? {
+fun AbstractKtSourceElement?.startOffsetSkippingComments(): Int? {
     return when (this) {
         is KtPsiSourceElement -> this.psi.startOffsetSkippingComments
         is KtLightSourceElement -> this.startOffsetSkippingComments
@@ -109,11 +109,7 @@ internal enum class ConversionTypeOrigin {
     SETTER
 }
 
-class ConversionTypeContext internal constructor(internal val origin: ConversionTypeOrigin) {
-    fun inSetter() = ConversionTypeContext(
-        origin = ConversionTypeOrigin.SETTER
-    )
-
+class ConversionTypeContext private constructor(internal val origin: ConversionTypeOrigin) {
     companion object {
         internal val DEFAULT = ConversionTypeContext(
             origin = ConversionTypeOrigin.DEFAULT
@@ -177,17 +173,24 @@ fun FirReference.toSymbolForCall(
     explicitReceiver: FirExpression?,
     preferGetter: Boolean = true,
     isDelegate: Boolean = false,
-    isReference: Boolean = false
+    isReference: Boolean = false,
 ): IrSymbol? {
     return when (this) {
-        is FirResolvedNamedReference ->
-            resolvedSymbol.toSymbolForCall(
+        is FirResolvedNamedReference -> {
+            var symbol = resolvedSymbol
+
+            if (symbol is FirCallableSymbol<*> && symbol.origin == FirDeclarationOrigin.SubstitutionOverride.CallSite) {
+                symbol = symbol.fir.unwrapUseSiteSubstitutionOverrides<FirCallableDeclaration>().symbol
+            }
+
+            symbol.toSymbolForCall(
                 dispatchReceiver,
                 preferGetter,
                 explicitReceiver,
                 isDelegate,
                 isReference
             )
+        }
 
         is FirThisReference -> {
             when (val boundSymbol = boundSymbol) {
@@ -240,10 +243,7 @@ private fun FirCallableSymbol<*>.toSymbolForCall(
         }
         // Unbound callable reference to member (non-extension)
         isReference && fir.receiverParameter == null -> {
-            // TODO: remove runIf with StandardClassIds.Any comparison after fixing ValueClass::equals case (KT-54887)
-            runIf(containingClassLookupTag()?.classId != StandardClassIds.Any) {
-                (explicitReceiver as? FirResolvedQualifier)?.toLookupTag(session)
-            }
+            (explicitReceiver as? FirResolvedQualifier)?.toLookupTag(session)
         }
         else -> null
     }
@@ -410,6 +410,7 @@ internal fun FirSimpleFunction.generateOverriddenFunctionSymbols(containingClass
 
     processOverriddenFunctionSymbols(containingClass) {
         for (overridden in fakeOverrideGenerator.getOverriddenSymbolsInSupertypes(it, superClasses)) {
+            assert(overridden != symbol) { "Cannot add function $overridden to its own overriddenSymbols" }
             overriddenSet += overridden
         }
     }
@@ -487,6 +488,7 @@ internal fun FirProperty.generateOverriddenPropertySymbols(containingClass: FirC
 
     processOverriddenPropertySymbols(containingClass) {
         for (overridden in fakeOverrideGenerator.getOverriddenSymbolsInSupertypes(it, superClasses)) {
+            assert(overridden != symbol) { "Cannot add property $overridden to its own overriddenSymbols" }
             overriddenSet += overridden
         }
     }
@@ -514,6 +516,7 @@ internal fun FirProperty.generateOverriddenAccessorSymbols(containingClass: FirC
                 if (isGetter) overriddenIrPropertySymbol.owner.getter?.symbol
                 else overriddenIrPropertySymbol.owner.setter?.symbol
             if (overriddenIrAccessorSymbol != null) {
+                assert(overriddenIrAccessorSymbol != symbol) { "Cannot add property $overriddenIrAccessorSymbol to its own overriddenSymbols" }
                 overriddenSet += overriddenIrAccessorSymbol
             }
         }
@@ -757,6 +760,6 @@ fun FirCallableDeclaration.contextReceiversForFunctionOrContainingProperty(): Li
     else
         this.contextReceivers
 
-fun IrActualizationResult?.extractFirDeclarations(): Set<FirDeclaration>? {
+fun IrActualizedResult?.extractFirDeclarations(): Set<FirDeclaration>? {
     return this?.actualizedExpectDeclarations?.mapNotNullTo(mutableSetOf()) { ((it as IrMetadataSourceOwner).metadata as FirMetadataSource).fir }
 }

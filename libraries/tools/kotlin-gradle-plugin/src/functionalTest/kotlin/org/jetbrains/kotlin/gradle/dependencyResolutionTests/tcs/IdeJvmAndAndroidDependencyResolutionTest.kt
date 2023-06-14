@@ -24,7 +24,7 @@ class IdeJvmAndAndroidDependencyResolutionTest {
 
     @BeforeTest
     fun checkEnvironment() {
-        assumeAndroidSdkAvailable()
+        assertAndroidSdkAvailable()
     }
 
     private fun Project.configureAndroidAndMultiplatform(enableDefaultStdlib: Boolean = false) {
@@ -41,13 +41,13 @@ class IdeJvmAndAndroidDependencyResolutionTest {
             common {
                 group("jvmAndAndroid") {
                     withJvm()
-                    withAndroid()
+                    withAndroidTarget()
                 }
             }
         }
 
         project.multiplatformExtension.jvm()
-        project.multiplatformExtension.android()
+        project.multiplatformExtension.androidTarget()
 
     }
 
@@ -109,6 +109,33 @@ class IdeJvmAndAndroidDependencyResolutionTest {
             friendSourceDependency(":consumer/jvmAndAndroidMain"),
             regularSourceDependency(":producer/commonMain"),
             regularSourceDependency(":producer/jvmAndAndroidMain"),
+        )
+    }
+
+    @Test
+    fun `test - KT-59020 - transitive project dependency to self`() {
+        val root = buildProject { setMultiplatformAndroidSourceSetLayoutVersion(2) }
+        val a = buildProject({ withParent(root).withName("a") }) { configureAndroidAndMultiplatform() }
+        val b = buildProject({ withParent(root).withName("b") }) { configureAndroidAndMultiplatform() }
+
+        b.multiplatformExtension.commonMain.dependencies {
+            api(project(":a"))
+        }
+
+        a.multiplatformExtension.commonTest.dependencies {
+            api(project(":b"))
+        }
+
+        root.evaluate()
+        a.evaluate()
+        b.evaluate()
+
+        a.kotlinIdeMultiplatformImport.resolveDependencies("jvmAndAndroidTest").assertMatches(
+            friendSourceDependency(":a/commonMain"),
+            friendSourceDependency(":a/jvmAndAndroidMain"),
+            dependsOnDependency(":a/commonTest"),
+            regularSourceDependency(":b/commonMain"),
+            regularSourceDependency(":b/jvmAndAndroidMain"),
         )
     }
 

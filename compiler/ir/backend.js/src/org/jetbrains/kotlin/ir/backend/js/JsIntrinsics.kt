@@ -146,6 +146,7 @@ class JsIntrinsics(private val irBuiltIns: IrBuiltIns, val context: JsIrBackendC
 
     val jsCode = getInternalFunction("js") // js("<code>")
     val jsHashCode = getInternalFunction("hashCode")
+    val jsGetBooleanHashCode = getInternalFunction("getBooleanHashCode")
     val jsGetNumberHashCode = getInternalFunction("getNumberHashCode")
     val jsGetObjectHashCode = getInternalFunction("getObjectHashCode")
     val jsGetStringHashCode = getInternalFunction("getStringHashCode")
@@ -185,7 +186,7 @@ class JsIntrinsics(private val irBuiltIns: IrBuiltIns, val context: JsIrBackendC
     val jsNumberRangeToLong = getInternalFunction("numberRangeToLong")
 
     private val _rangeUntilFunctions = irBuiltIns.findFunctions(Name.identifier("until"), "kotlin", "ranges")
-    val rangeUntilFunctions by lazy {
+    val rangeUntilFunctions by lazy(LazyThreadSafetyMode.NONE) {
         _rangeUntilFunctions
             .filter { it.owner.extensionReceiverParameter != null && it.owner.valueParameters.size == 1 }
             .associateBy { it.owner.extensionReceiverParameter!!.type to it.owner.valueParameters[0].type }
@@ -324,11 +325,11 @@ class JsIntrinsics(private val irBuiltIns: IrBuiltIns, val context: JsIrBackendC
     val jsFunAnnotationSymbol = context.symbolTable.referenceClass(context.getJsInternalClass("JsFun"))
     val jsNameAnnotationSymbol = context.symbolTable.referenceClass(context.getJsInternalClass("JsName"))
 
-    val jsExportAnnotationSymbol by lazy {
+    val jsExportAnnotationSymbol by lazy(LazyThreadSafetyMode.NONE) {
       context.symbolTable.referenceClass(context.getJsInternalClass("JsExport"))
     }
 
-    val jsExportIgnoreAnnotationSymbol by lazy {
+    val jsExportIgnoreAnnotationSymbol by lazy(LazyThreadSafetyMode.NONE) {
         jsExportAnnotationSymbol.owner
             .findDeclaration<IrClass> { it.fqNameWhenAvailable == FqName("kotlin.js.JsExport.Ignore") }
             ?.symbol ?: error("can't find kotlin.js.JsExport.Ignore annotation")

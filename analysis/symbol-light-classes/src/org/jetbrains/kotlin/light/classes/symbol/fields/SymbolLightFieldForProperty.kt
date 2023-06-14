@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.analysis.api.KtAnalysisSession
 import org.jetbrains.kotlin.analysis.api.KtConstantInitializerValue
 import org.jetbrains.kotlin.analysis.api.annotations.*
 import org.jetbrains.kotlin.analysis.api.base.KtConstantValue
+import org.jetbrains.kotlin.analysis.api.symbols.KtBackingFieldSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KtKotlinPropertySymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KtPropertySymbol
 import org.jetbrains.kotlin.analysis.api.symbols.markers.isPrivateOrPrivateToThis
@@ -38,6 +39,7 @@ internal class SymbolLightFieldForProperty private constructor(
     lightMemberOrigin: LightMemberOrigin?,
     private val isStatic: Boolean,
     override val kotlinOrigin: KtCallableDeclaration?,
+    private val backingFieldSymbolPointer: KtSymbolPointer<KtBackingFieldSymbol>?,
 ) : SymbolLightField(containingClass, lightMemberOrigin) {
     internal constructor(
         ktAnalysisSession: KtAnalysisSession,
@@ -53,6 +55,7 @@ internal class SymbolLightFieldForProperty private constructor(
         lightMemberOrigin = lightMemberOrigin,
         isStatic = isStatic,
         kotlinOrigin = propertySymbol.sourcePsiSafe<KtCallableDeclaration>(),
+        backingFieldSymbolPointer = with(ktAnalysisSession) { propertySymbol.backingFieldSymbol?.createPointer() },
     )
 
     private inline fun <T> withPropertySymbol(crossinline action: context (KtAnalysisSession) (KtPropertySymbol) -> T): T {
@@ -66,10 +69,15 @@ internal class SymbolLightFieldForProperty private constructor(
                 (kotlinOrigin as? KtProperty)?.delegateExpression?.getKtType()
             else
                 propertySymbol.returnType
+            // See [KotlinTypeMapper#writeFieldSignature]
+            val typeMappingMode = if (propertySymbol.isVal)
+                KtTypeMappingMode.RETURN_TYPE
+            else
+                KtTypeMappingMode.VALUE_PARAMETER
             ktType?.asPsiType(
                 this@SymbolLightFieldForProperty,
                 allowErrorTypes = true,
-                KtTypeMappingMode.RETURN_TYPE
+                typeMappingMode,
             )
         } ?: nonExistentType()
     }
@@ -81,7 +89,9 @@ internal class SymbolLightFieldForProperty private constructor(
     }
 
     override fun isEquivalentTo(another: PsiElement?): Boolean {
-        return super.isEquivalentTo(another) || isOriginEquivalentTo(another)
+        return super.isEquivalentTo(another) ||
+                basicIsEquivalentTo(this, another as? PsiMethod) ||
+                isOriginEquivalentTo(another)
     }
 
     override fun isDeprecated(): Boolean = _isDeprecated
@@ -118,19 +128,19 @@ internal class SymbolLightFieldForProperty private constructor(
         }
 
         PsiModifier.VOLATILE -> withPropertySymbol { propertySymbol ->
-            val hasAnnotation = propertySymbol.hasAnnotation(
+            val hasAnnotation = propertySymbol.backingFieldSymbol?.hasAnnotation(
                 VOLATILE_ANNOTATION_CLASS_ID,
                 AnnotationUseSiteTarget.FIELD.toOptionalFilter(),
-            )
+            ) == true
 
             mapOf(modifier to hasAnnotation)
         }
 
         PsiModifier.TRANSIENT -> withPropertySymbol { propertySymbol ->
-            val hasAnnotation = propertySymbol.hasAnnotation(
+            val hasAnnotation = propertySymbol.backingFieldSymbol?.hasAnnotation(
                 TRANSIENT_ANNOTATION_CLASS_ID,
                 AnnotationUseSiteTarget.FIELD.toOptionalFilter(),
-            )
+            ) == true
 
             mapOf(modifier to hasAnnotation)
         }
@@ -148,7 +158,7 @@ internal class SymbolLightFieldForProperty private constructor(
             annotationsBox = GranularAnnotationsBox(
                 annotationsProvider = SymbolAnnotationsProvider(
                     ktModule = ktModule,
-                    annotatedSymbolPointer = propertySymbolPointer,
+                    annotatedSymbolPointer = backingFieldSymbolPointer ?: propertySymbolPointer,
                     annotationUseSiteTargetFilter = AnnotationUseSiteTarget.FIELD.toOptionalFilter(),
                 ),
                 additionalAnnotationsProvider = NullabilityAnnotationsProvider {

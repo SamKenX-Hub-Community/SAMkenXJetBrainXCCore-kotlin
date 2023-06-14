@@ -129,9 +129,11 @@ object FirTreeBuilder : AbstractFirTreeBuilder() {
     val integerLiteralOperatorCall by element(Expression, functionCall)
     val implicitInvokeCall by element(Expression, functionCall)
     val delegatedConstructorCall by element(Expression, resolvable, call, contextReceiverArgumentListOwner)
+    val multiDelegatedConstructorCall by element(Expression, delegatedConstructorCall)
     val componentCall by element(Expression, functionCall)
     val callableReferenceAccess by element(Expression, qualifiedAccessExpression)
     val thisReceiverExpression by element(Expression, qualifiedAccessExpression)
+    val inaccessibleReceiverExpression by element(Expression, expression, resolvable)
 
     val smartCastExpression by element(Expression, expression)
     val safeCallExpression by element(Expression, expression)
@@ -155,6 +157,8 @@ object FirTreeBuilder : AbstractFirTreeBuilder() {
     val desugaredAssignmentValueReferenceExpression by element(Expression, expression)
 
     val wrappedDelegateExpression by element(Expression, wrappedExpression)
+
+    val enumEntryDeserializedAccessExpression by element(Expression, expression)
 
     val namedReference by element(Reference, reference)
     val namedReferenceWithCandidateBase by element(Reference, namedReference)
@@ -180,7 +184,8 @@ object FirTreeBuilder : AbstractFirTreeBuilder() {
     val intersectionTypeRef by element(TypeRef, typeRefWithNullability)
     val implicitTypeRef by element(TypeRef, typeRef)
 
-    val effectDeclaration by element(Contracts)
+    val contractElementDeclaration by element(Contracts)
+    val effectDeclaration by element(Contracts, contractElementDeclaration)
 
     val contractDescription by element(Contracts)
     val legacyRawContractDescription by element(Contracts, contractDescription)

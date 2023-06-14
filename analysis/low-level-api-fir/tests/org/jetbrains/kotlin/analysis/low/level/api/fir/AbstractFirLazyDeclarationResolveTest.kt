@@ -5,95 +5,53 @@
 
 package org.jetbrains.kotlin.analysis.low.level.api.fir
 
-import org.jetbrains.kotlin.analysis.low.level.api.fir.test.base.AbstractLowLevelApiSingleFileTest
+import org.jetbrains.kotlin.analysis.low.level.api.fir.api.LLFirResolveSession
+import org.jetbrains.kotlin.analysis.low.level.api.fir.api.resolveToFirSymbol
+import org.jetbrains.kotlin.analysis.low.level.api.fir.sessions.LLFirResolvableModuleSession
 import org.jetbrains.kotlin.analysis.low.level.api.fir.test.configurators.AnalysisApiFirOutOfContentRootTestConfigurator
 import org.jetbrains.kotlin.analysis.low.level.api.fir.test.configurators.AnalysisApiFirSourceTestConfigurator
-import org.jetbrains.kotlin.fir.FirElement
-import org.jetbrains.kotlin.fir.declarations.FirDeclaration
+import org.jetbrains.kotlin.analysis.test.framework.services.expressionMarkerProvider
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
-import org.jetbrains.kotlin.fir.realPsi
-import org.jetbrains.kotlin.fir.renderer.FirDeclarationRendererWithAttributes
-import org.jetbrains.kotlin.fir.renderer.FirErrorExpressionExtendedRenderer
-import org.jetbrains.kotlin.fir.renderer.FirFileAnnotationsContainerRenderer
-import org.jetbrains.kotlin.fir.renderer.FirRenderer
-import org.jetbrains.kotlin.fir.renderer.FirResolvePhaseRenderer
+import org.jetbrains.kotlin.fir.symbols.FirBasedSymbol
 import org.jetbrains.kotlin.fir.symbols.lazyResolveToPhase
-import org.jetbrains.kotlin.fir.visitors.FirVisitorVoid
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.test.builders.TestConfigurationBuilder
 import org.jetbrains.kotlin.test.directives.ConfigurationDirectives
+import org.jetbrains.kotlin.test.directives.model.SimpleDirectivesContainer
 import org.jetbrains.kotlin.test.services.TestModuleStructure
 import org.jetbrains.kotlin.test.services.TestServices
-import org.jetbrains.kotlin.test.services.assertions
-import org.jetbrains.kotlin.util.capitalizeDecapitalize.decapitalizeAsciiOnly
 import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode
 
-/**
- * Test that we do not resolve declarations we do not need & do not build bodies for them
- */
 @Execution(ExecutionMode.SAME_THREAD)
-abstract class AbstractFirLazyDeclarationResolveTest : AbstractLowLevelApiSingleFileTest() {
-
-    private fun FirFile.findResolveMe(): FirDeclaration {
-        val visitor = object : FirVisitorVoid() {
-            var result: FirDeclaration? = null
-            override fun visitElement(element: FirElement) {
-                if (result != null) return
-                if (element is FirDeclaration) {
-                    val declaration = element.realPsi as? KtDeclaration
-                    if (declaration != null && declaration.name?.decapitalizeAsciiOnly() == "resolveMe") {
-                        result = element
-                        return
-                    }
-                }
-                element.acceptChildren(this)
-            }
-
-        }
-        accept(visitor)
-        return visitor.result ?: error("declaration with name `resolveMe` was not found")
+abstract class AbstractFirLazyDeclarationResolveTest : AbstractFirLazyDeclarationResolveTestCase() {
+    override fun checkSession(firSession: LLFirResolveSession) {
+        require(firSession.isSourceSession)
     }
 
     override fun doTestByFileStructure(ktFile: KtFile, moduleStructure: TestModuleStructure, testServices: TestServices) {
-        val resultBuilder = StringBuilder()
-        val renderer = FirRenderer(
-            builder = resultBuilder,
-            declarationRenderer = FirDeclarationRendererWithAttributes(),
-            resolvePhaseRenderer = FirResolvePhaseRenderer(),
-            errorExpressionRenderer = FirErrorExpressionExtendedRenderer(),
-            fileAnnotationsContainerRenderer = FirFileAnnotationsContainerRenderer(),
-        )
-
-        resolveWithClearCaches(ktFile) { firResolveSession ->
-            check(firResolveSession.isSourceSession)
-            val declarationToResolve = firResolveSession
-                .getOrBuildFirFile(ktFile)
-                .findResolveMe()
-            for (currentPhase in FirResolvePhase.values()) {
-                if (currentPhase == FirResolvePhase.SEALED_CLASS_INHERITORS) continue
-                declarationToResolve.lazyResolveToPhase(currentPhase)
-                val firFile = firResolveSession.getOrBuildFirFile(ktFile)
-                resultBuilder.append("\n${currentPhase.name}:\n")
-                renderer.renderElementAsString(firFile)
+        doLazyResolveTest(ktFile, testServices) { firResolveSession ->
+            if (Directives.RESOLVE_FILE_ANNOTATIONS in moduleStructure.allDirectives) {
+                val annotationContainer = firResolveSession.getOrBuildFirFile(ktFile).annotationsContainer
+                val session = annotationContainer.moduleData.session as LLFirResolvableModuleSession
+                fun(phase: FirResolvePhase) {
+                    session.moduleComponents.firModuleLazyDeclarationResolver.lazyResolve(
+                        annotationContainer,
+                        session.getScopeSession(),
+                        phase,
+                    )
+                }
+            } else {
+                val ktDeclaration = testServices.expressionMarkerProvider.getElementOfTypeAtCaret<KtDeclaration>(ktFile)
+                val declarationSymbol = ktDeclaration.resolveToFirSymbol(firResolveSession)
+                val firDeclaration = chooseMemberDeclarationIfNeeded(declarationSymbol, moduleStructure)
+                fun(phase: FirResolvePhase) {
+                    firDeclaration.lazyResolveToPhase(phase)
+                }
             }
         }
-
-        resolveWithClearCaches(ktFile) { llSession ->
-            check(llSession.isSourceSession)
-            val firFile = llSession.getOrBuildFirFile(ktFile)
-            firFile.lazyResolveToPhase(FirResolvePhase.BODY_RESOLVE)
-            if (resultBuilder.isNotEmpty()) {
-                resultBuilder.appendLine()
-            }
-
-            resultBuilder.append("FILE RAW TO BODY:\n")
-            renderer.renderElementAsString(firFile)
-        }
-
-        testServices.assertions.assertEqualsToTestDataFileSibling(resultBuilder.toString())
     }
 
     override fun configureTest(builder: TestConfigurationBuilder) {
@@ -102,7 +60,13 @@ abstract class AbstractFirLazyDeclarationResolveTest : AbstractLowLevelApiSingle
             defaultDirectives {
                 +ConfigurationDirectives.WITH_STDLIB
             }
+
+            useDirectives(Directives)
         }
+    }
+
+    private object Directives : SimpleDirectivesContainer() {
+        val RESOLVE_FILE_ANNOTATIONS by directive("Resolve file annotations instead of declaration at caret")
     }
 }
 

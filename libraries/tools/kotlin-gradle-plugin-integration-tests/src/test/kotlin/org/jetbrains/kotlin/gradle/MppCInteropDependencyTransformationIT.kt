@@ -25,10 +25,6 @@ import org.junit.Test
  */
 abstract class MppCInteropDependencyTransformationIT : BaseGradleIT() {
 
-    enum class DependencyMode {
-        Project, Repository
-    }
-
     override fun defaultBuildOptions(): BuildOptions = super.defaultBuildOptions().run {
         copy(
             forceOutputToStdout = true,
@@ -84,18 +80,20 @@ abstract class MppCInteropDependencyTransformationIT : BaseGradleIT() {
                     assertTasksExecuted(":p3:compileIosMainKotlinMetadata")
                 }
 
-                if (HostManager.hostIsMingw || HostManager.hostIsMac) {
-                    assertTasksExecuted(":p2:compileWindowsMainKotlinMetadata")
-                    assertTasksExecuted(":p3:compileWindowsMainKotlinMetadata")
-                }
-
                 /* Assert p2 & p3 transformed cinterop dependencies */
                 assertTasksExecuted(":p2:transformNativeMainCInteropDependenciesMetadata")
                 assertTasksExecuted(":p3:transformNativeMainCInteropDependenciesMetadata")
 
+                /* Assert p2 & p3 compiled for Windows */
+                assertTasksExecuted(":p2:compileKotlinWindowsX64")
+                assertTasksExecuted(":p3:compileKotlinWindowsX64")
+                    
                 /* Assert p2 & p3 compiled tests */
                 assertTasksExecuted(":p2:compileTestKotlinLinuxX64")
                 assertTasksExecuted(":p3:compileTestKotlinLinuxX64")
+
+                /* Configurations should not be resolved during configuration phase */
+                assertNotContains("Configuration resolved before Task Graph is ready")
             }
         }
 
@@ -140,7 +138,7 @@ abstract class MppCInteropDependencyTransformationIT : BaseGradleIT() {
                 getCommonizerDependencies(sourceSetName).withoutNativeDistributionDependencies()
                     .assertDependencyFilesMatches(".*cinterop-simple.*", ".*cinterop-withPosix.*")
                     .assertTargetOnAllDependencies(
-                        CommonizerTarget(LINUX_ARM64, LINUX_X64, IOS_ARM64, IOS_X64, MACOS_X64, MINGW_X64, MINGW_X86)
+                        CommonizerTarget(LINUX_ARM64, LINUX_X64, IOS_ARM64, IOS_X64, MACOS_X64, MINGW_X64)
                     )
             }
 
@@ -164,18 +162,10 @@ abstract class MppCInteropDependencyTransformationIT : BaseGradleIT() {
                 }
             }
 
-            if (HostManager.hostIsMingw || HostManager.hostIsMac) {
-                listOf("windowsMain", "windowsTest").forEach { sourceSetName ->
-                    getCommonizerDependencies(sourceSetName).withoutNativeDistributionDependencies()
-                        .assertDependencyFilesMatches(".*cinterop-simple.*", ".*cinterop-withPosix.*")
-                        .assertTargetOnAllDependencies(CommonizerTarget(MINGW_X64, MINGW_X86))
-                }
-
-                listOf("linuxMain", "linuxTest").forEach { sourceSetName ->
-                    getCommonizerDependencies(sourceSetName).withoutNativeDistributionDependencies()
-                        .assertDependencyFilesMatches(".*cinterop-simple.*", ".*cinterop-withPosix.*")
-                        .assertTargetOnAllDependencies(CommonizerTarget(LINUX_ARM64, LINUX_X64))
-                }
+            listOf("linuxMain", "linuxTest").forEach { sourceSetName ->
+                getCommonizerDependencies(sourceSetName).withoutNativeDistributionDependencies()
+                    .assertDependencyFilesMatches(".*cinterop-simple.*", ".*cinterop-withPosix.*")
+                    .assertTargetOnAllDependencies(CommonizerTarget(LINUX_ARM64, LINUX_X64))
             }
         }
 
@@ -188,7 +178,7 @@ abstract class MppCInteropDependencyTransformationIT : BaseGradleIT() {
                 getCommonizerDependencies(sourceSetName).withoutNativeDistributionDependencies()
                     .assertDependencyFilesMatches(".*cinterop-simple.*", ".*cinterop-withPosix.*")
                     .assertTargetOnAllDependencies(
-                        CommonizerTarget(LINUX_ARM64, LINUX_X64, IOS_ARM64, IOS_X64, MACOS_X64, MINGW_X64, MINGW_X86)
+                        CommonizerTarget(LINUX_ARM64, LINUX_X64, IOS_ARM64, IOS_X64, MACOS_X64, MINGW_X64)
                     )
             }
 
@@ -203,14 +193,6 @@ abstract class MppCInteropDependencyTransformationIT : BaseGradleIT() {
                     getCommonizerDependencies(sourceSetName).withoutNativeDistributionDependencies()
                         .assertDependencyFilesMatches(".*cinterop-simple.*", ".*cinterop-withPosix.*")
                         .assertTargetOnAllDependencies(CommonizerTarget(IOS_ARM64, IOS_X64))
-                }
-            }
-
-            if (HostManager.hostIsMingw || HostManager.hostIsMac) {
-                listOf("windowsMain", "windowsTest").forEach { sourceSetName ->
-                    getCommonizerDependencies(sourceSetName).withoutNativeDistributionDependencies()
-                        .assertDependencyFilesMatches(".*cinterop-simple.*", ".*cinterop-withPosix.*")
-                        .assertTargetOnAllDependencies(CommonizerTarget(MINGW_X64, MINGW_X86))
                 }
             }
         }
@@ -257,8 +239,8 @@ abstract class MppCInteropDependencyTransformationIT : BaseGradleIT() {
             )
             project.build(":p3:transformNativeMainCInteropDependenciesMetadata", options = repositoryDependencyOptions) {
                 assertSuccessful()
-                /* Same binaries to transform; does not matter if coming from project dependency or direct one */
-                assertTasksUpToDate(":p3:transformNativeMainCInteropDependenciesMetadata")
+                /* Same binaries to transform; but project(":p2") is excluded from Task Inputs now */
+                assertTasksExecuted(":p3:transformNativeMainCInteropDependenciesMetadata")
             }
         }
 
@@ -293,15 +275,15 @@ abstract class MppCInteropDependencyTransformationIT : BaseGradleIT() {
         @Test
         fun `test UP-TO-DATE - when changing consumer targets - dependencyMode=repository`() {
             project.publishP1ToBuildRepository()
-            `test UP-TO-DATE - when changing consumer targets`(repositoryDependencyOptions, DependencyMode.Repository)
+            `test UP-TO-DATE - when changing consumer targets`(repositoryDependencyOptions)
         }
 
         @Test
         fun `test UP-TO-DATE - when changing consumer targets - dependencyMode=project`() {
-            `test UP-TO-DATE - when changing consumer targets`(projectDependencyOptions, DependencyMode.Project)
+            `test UP-TO-DATE - when changing consumer targets`(projectDependencyOptions)
         }
 
-        private fun `test UP-TO-DATE - when changing consumer targets`(options: BuildOptions, mode: DependencyMode) {
+        private fun `test UP-TO-DATE - when changing consumer targets`(options: BuildOptions) {
             project.build(":p2:transformCommonMainCInteropDependenciesMetadata", options = options) {
                 assertSuccessful()
             }
@@ -312,17 +294,11 @@ abstract class MppCInteropDependencyTransformationIT : BaseGradleIT() {
                 assertTasksUpToDate(":p2:transformCommonMainCInteropDependenciesMetadata")
             }
 
-            val optionsWithAdditionalTargetEnabled = options.withFreeCommandLineArgument("-Pp2.enableLinuxArm32Hfp")
+            val optionsWithAdditionalTargetEnabled = options.withFreeCommandLineArgument("-Pp2.enableAdditionalTarget")
 
             project.build(":p2:transformCommonMainCInteropDependenciesMetadata", options = optionsWithAdditionalTargetEnabled) {
                 assertSuccessful()
-
-                when (mode) {
-                    DependencyMode.Repository -> assertTasksExecuted(":p2:transformCommonMainCInteropDependenciesMetadata")
-                    /* Had nothing to do before (project to project dependencies are not handled by this task), has still nothing to do) */
-                    DependencyMode.Project -> assertTasksUpToDate(":p2:transformCommonMainCInteropDependenciesMetadata")
-                }
-
+                assertTasksExecuted(":p2:transformCommonMainCInteropDependenciesMetadata")
             }
 
             project.build(":p2:transformCommonMainCInteropDependenciesMetadata", options = optionsWithAdditionalTargetEnabled) {
@@ -333,12 +309,7 @@ abstract class MppCInteropDependencyTransformationIT : BaseGradleIT() {
 
             project.build(":p2:transformCommonMainCInteropDependenciesMetadata", options = options) {
                 assertSuccessful()
-
-                when (mode) {
-                    DependencyMode.Repository -> assertTasksExecuted(":p2:transformCommonMainCInteropDependenciesMetadata")
-                    /* Had nothing to do before (project to project dependencies are not handled by this task), has still nothing to do) */
-                    DependencyMode.Project -> assertTasksUpToDate(":p2:transformCommonMainCInteropDependenciesMetadata")
-                }
+                assertTasksExecuted(":p2:transformCommonMainCInteropDependenciesMetadata")
             }
 
             project.build(":p2:transformCommonMainCInteropDependenciesMetadata", options = options) {

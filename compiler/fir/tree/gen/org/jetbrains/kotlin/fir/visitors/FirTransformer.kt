@@ -105,9 +105,11 @@ import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
 import org.jetbrains.kotlin.fir.expressions.FirIntegerLiteralOperatorCall
 import org.jetbrains.kotlin.fir.expressions.FirImplicitInvokeCall
 import org.jetbrains.kotlin.fir.expressions.FirDelegatedConstructorCall
+import org.jetbrains.kotlin.fir.expressions.FirMultiDelegatedConstructorCall
 import org.jetbrains.kotlin.fir.expressions.FirComponentCall
 import org.jetbrains.kotlin.fir.expressions.FirCallableReferenceAccess
 import org.jetbrains.kotlin.fir.expressions.FirThisReceiverExpression
+import org.jetbrains.kotlin.fir.expressions.FirInaccessibleReceiverExpression
 import org.jetbrains.kotlin.fir.expressions.FirSmartCastExpression
 import org.jetbrains.kotlin.fir.expressions.FirSafeCallExpression
 import org.jetbrains.kotlin.fir.expressions.FirCheckedSafeCallSubject
@@ -128,6 +130,7 @@ import org.jetbrains.kotlin.fir.expressions.FirVariableAssignment
 import org.jetbrains.kotlin.fir.expressions.FirWhenSubjectExpression
 import org.jetbrains.kotlin.fir.expressions.FirDesugaredAssignmentValueReferenceExpression
 import org.jetbrains.kotlin.fir.expressions.FirWrappedDelegateExpression
+import org.jetbrains.kotlin.fir.expressions.FirEnumEntryDeserializedAccessExpression
 import org.jetbrains.kotlin.fir.references.FirNamedReference
 import org.jetbrains.kotlin.fir.references.FirNamedReferenceWithCandidateBase
 import org.jetbrains.kotlin.fir.references.FirErrorNamedReference
@@ -148,6 +151,7 @@ import org.jetbrains.kotlin.fir.types.FirDynamicTypeRef
 import org.jetbrains.kotlin.fir.types.FirFunctionTypeRef
 import org.jetbrains.kotlin.fir.types.FirIntersectionTypeRef
 import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
+import org.jetbrains.kotlin.fir.contracts.FirContractElementDeclaration
 import org.jetbrains.kotlin.fir.contracts.FirEffectDeclaration
 import org.jetbrains.kotlin.fir.contracts.FirContractDescription
 import org.jetbrains.kotlin.fir.contracts.FirLegacyRawContractDescription
@@ -559,6 +563,10 @@ abstract class FirTransformer<in D> : FirVisitor<FirElement, D>() {
         return transformElement(delegatedConstructorCall, data)
     }
 
+    open fun transformMultiDelegatedConstructorCall(multiDelegatedConstructorCall: FirMultiDelegatedConstructorCall, data: D): FirStatement {
+        return transformElement(multiDelegatedConstructorCall, data)
+    }
+
     open fun transformComponentCall(componentCall: FirComponentCall, data: D): FirStatement {
         return transformElement(componentCall, data)
     }
@@ -569,6 +577,10 @@ abstract class FirTransformer<in D> : FirVisitor<FirElement, D>() {
 
     open fun transformThisReceiverExpression(thisReceiverExpression: FirThisReceiverExpression, data: D): FirStatement {
         return transformElement(thisReceiverExpression, data)
+    }
+
+    open fun transformInaccessibleReceiverExpression(inaccessibleReceiverExpression: FirInaccessibleReceiverExpression, data: D): FirStatement {
+        return transformElement(inaccessibleReceiverExpression, data)
     }
 
     open fun transformSmartCastExpression(smartCastExpression: FirSmartCastExpression, data: D): FirStatement {
@@ -651,6 +663,10 @@ abstract class FirTransformer<in D> : FirVisitor<FirElement, D>() {
         return transformElement(wrappedDelegateExpression, data)
     }
 
+    open fun transformEnumEntryDeserializedAccessExpression(enumEntryDeserializedAccessExpression: FirEnumEntryDeserializedAccessExpression, data: D): FirStatement {
+        return transformElement(enumEntryDeserializedAccessExpression, data)
+    }
+
     open fun transformNamedReference(namedReference: FirNamedReference, data: D): FirReference {
         return transformElement(namedReference, data)
     }
@@ -731,7 +747,11 @@ abstract class FirTransformer<in D> : FirVisitor<FirElement, D>() {
         return transformElement(implicitTypeRef, data)
     }
 
-    open fun transformEffectDeclaration(effectDeclaration: FirEffectDeclaration, data: D): FirEffectDeclaration {
+    open fun transformContractElementDeclaration(contractElementDeclaration: FirContractElementDeclaration, data: D): FirContractElementDeclaration {
+        return transformElement(contractElementDeclaration, data)
+    }
+
+    open fun transformEffectDeclaration(effectDeclaration: FirEffectDeclaration, data: D): FirContractElementDeclaration {
         return transformElement(effectDeclaration, data)
     }
 
@@ -1151,6 +1171,10 @@ abstract class FirTransformer<in D> : FirVisitor<FirElement, D>() {
         return transformDelegatedConstructorCall(delegatedConstructorCall, data)
     }
 
+    final override fun visitMultiDelegatedConstructorCall(multiDelegatedConstructorCall: FirMultiDelegatedConstructorCall, data: D): FirStatement {
+        return transformMultiDelegatedConstructorCall(multiDelegatedConstructorCall, data)
+    }
+
     final override fun visitComponentCall(componentCall: FirComponentCall, data: D): FirStatement {
         return transformComponentCall(componentCall, data)
     }
@@ -1161,6 +1185,10 @@ abstract class FirTransformer<in D> : FirVisitor<FirElement, D>() {
 
     final override fun visitThisReceiverExpression(thisReceiverExpression: FirThisReceiverExpression, data: D): FirStatement {
         return transformThisReceiverExpression(thisReceiverExpression, data)
+    }
+
+    final override fun visitInaccessibleReceiverExpression(inaccessibleReceiverExpression: FirInaccessibleReceiverExpression, data: D): FirStatement {
+        return transformInaccessibleReceiverExpression(inaccessibleReceiverExpression, data)
     }
 
     final override fun visitSmartCastExpression(smartCastExpression: FirSmartCastExpression, data: D): FirStatement {
@@ -1243,6 +1271,10 @@ abstract class FirTransformer<in D> : FirVisitor<FirElement, D>() {
         return transformWrappedDelegateExpression(wrappedDelegateExpression, data)
     }
 
+    final override fun visitEnumEntryDeserializedAccessExpression(enumEntryDeserializedAccessExpression: FirEnumEntryDeserializedAccessExpression, data: D): FirStatement {
+        return transformEnumEntryDeserializedAccessExpression(enumEntryDeserializedAccessExpression, data)
+    }
+
     final override fun visitNamedReference(namedReference: FirNamedReference, data: D): FirReference {
         return transformNamedReference(namedReference, data)
     }
@@ -1323,7 +1355,11 @@ abstract class FirTransformer<in D> : FirVisitor<FirElement, D>() {
         return transformImplicitTypeRef(implicitTypeRef, data)
     }
 
-    final override fun visitEffectDeclaration(effectDeclaration: FirEffectDeclaration, data: D): FirEffectDeclaration {
+    final override fun visitContractElementDeclaration(contractElementDeclaration: FirContractElementDeclaration, data: D): FirContractElementDeclaration {
+        return transformContractElementDeclaration(contractElementDeclaration, data)
+    }
+
+    final override fun visitEffectDeclaration(effectDeclaration: FirEffectDeclaration, data: D): FirContractElementDeclaration {
         return transformEffectDeclaration(effectDeclaration, data)
     }
 

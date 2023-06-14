@@ -39,6 +39,8 @@ class KonanConfigKeys {
                 = CompilerConfigurationKey.create<List<String>>("paths to the root directories from which dependencies are to be cached automatically")
         val AUTO_CACHE_DIR: CompilerConfigurationKey<String>
                 = CompilerConfigurationKey.create<String>("path to the directory where to put caches for auto-cacheable dependencies")
+        val INCREMENTAL_CACHE_DIR: CompilerConfigurationKey<String>
+                = CompilerConfigurationKey.create<String>("path to the directory where to put incremental build caches")
         val CACHED_LIBRARIES: CompilerConfigurationKey<Map<String, String>>
                 = CompilerConfigurationKey.create<Map<String, String>>("mapping from library paths to cache paths")
         val FILES_TO_CACHE: CompilerConfigurationKey<List<String>>
@@ -149,7 +151,6 @@ class KonanConfigKeys {
                 = CompilerConfigurationKey.create("override konan.properties values")
         val DESTROY_RUNTIME_MODE: CompilerConfigurationKey<DestroyRuntimeMode>
                 = CompilerConfigurationKey.create("when to destroy runtime")
-        val GARBAGE_COLLECTOR: CompilerConfigurationKey<GC> = CompilerConfigurationKey.create("gc")
         val PROPERTY_LAZY_INITIALIZATION: CompilerConfigurationKey<Boolean>
                 = CompilerConfigurationKey.create("lazy top level properties initialization")
         val WORKER_EXCEPTION_HANDLING: CompilerConfigurationKey<WorkerExceptionHandling> = CompilerConfigurationKey.create("unhandled exception processing in Worker.executeAfter")

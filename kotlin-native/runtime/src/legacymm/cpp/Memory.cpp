@@ -1123,7 +1123,7 @@ void processFinalizerQueue(MemoryState* state) {
     state->containers->erase(container);
 #endif
     CONTAINER_DESTROY_EVENT(state, container)
-    freeInObjectPool(container);
+    freeInObjectPool(container, 0);
     atomicAdd(&allocCount, -1);
   }
   RuntimeAssert(state->finalizerQueueSize == 0, "Queue must be empty here");
@@ -1164,7 +1164,7 @@ void scheduleDestroyContainer(MemoryState* state, ContainerHeader* container) {
     processFinalizerQueue(state);
   }
 #else
-  freeInObjectPool(container);
+  freeInObjectPool(container), 0;
   atomicAdd(&allocCount, -1);
   CONTAINER_DESTROY_EVENT(state, container);
 #endif
@@ -3085,7 +3085,9 @@ void ObjHeader::destroyMetaObject(ObjHeader* object) {
   }
 
 #ifdef KONAN_OBJC_INTEROP
-  Kotlin_ObjCExport_releaseAssociatedObject(meta->associatedObject_);
+  if (void* associatedObject = meta->associatedObject_) {
+    Kotlin_ObjCExport_releaseAssociatedObject(associatedObject);
+  }
 #endif
 
   std_support::allocator_delete(objectAllocator, meta);
@@ -3142,7 +3144,7 @@ void ArenaContainer::Deinit() {
   while (chunk != nullptr) {
     auto toRemove = chunk;
     chunk = chunk->next;
-    freeInObjectPool(toRemove);
+    freeInObjectPool(toRemove, 0);
   }
 }
 

@@ -1,5 +1,4 @@
 // !LANGUAGE: +ContextReceivers
-// TARGET_BACKEND: JVM_IR
 
 class Param
 class O {

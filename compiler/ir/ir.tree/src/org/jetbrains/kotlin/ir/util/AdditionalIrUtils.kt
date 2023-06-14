@@ -15,11 +15,9 @@ import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.ir.symbols.impl.IrClassPublicSymbolImpl
-import org.jetbrains.kotlin.name.ClassId
-import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.name.SpecialNames
+import org.jetbrains.kotlin.name.*
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
+import org.jetbrains.kotlin.utils.filterIsInstanceAnd
 import java.io.File
 
 val IrConstructor.constructedClass get() = this.parent as IrClass
@@ -33,7 +31,7 @@ fun IrFunction.isInlineArrayConstructor(builtIns: IrBuiltIns): Boolean =
 
 val IrDeclarationParent.fqNameForIrSerialization: FqName
     get() = when (this) {
-        is IrPackageFragment -> this.fqName
+        is IrPackageFragment -> this.packageFqName
         is IrDeclarationWithName -> this.parent.fqNameForIrSerialization.child(this.name)
         else -> error(this)
     }
@@ -43,7 +41,7 @@ val IrDeclarationParent.fqNameForIrSerialization: FqName
  */
 val IrDeclarationParent.kotlinFqName: FqName
     get() = when (this) {
-        is IrPackageFragment -> this.fqName
+        is IrPackageFragment -> this.packageFqName
         is IrClass -> {
             if (isFileClass) {
                 parent.kotlinFqName
@@ -56,10 +54,47 @@ val IrDeclarationParent.kotlinFqName: FqName
     }
 
 val IrClass.classId: ClassId?
+    get() = classIdImpl
+
+val IrTypeAlias.classId: ClassId?
+    get() = classIdImpl
+
+private val IrDeclarationWithName.classIdImpl: ClassId?
     get() = when (val parent = this.parent) {
         is IrClass -> parent.classId?.createNestedClassId(this.name)
-        is IrPackageFragment -> ClassId.topLevel(parent.fqName.child(this.name))
+        is IrPackageFragment -> ClassId.topLevel(parent.packageFqName.child(this.name))
         else -> null
+    }
+
+val IrClass.classIdOrFail: ClassId
+    get() = classIdOrFailImpl
+
+val IrTypeAlias.classIdOrFail: ClassId
+    get() = classIdOrFailImpl
+
+private val IrDeclarationWithName.classIdOrFailImpl: ClassId
+    get() = classIdImpl ?: error("No classId for $this")
+
+val IrFunction.callableId: CallableId
+    get() = callableIdImpl
+
+val IrProperty.callableId: CallableId
+    get() = callableIdImpl
+
+val IrField.callableId: CallableId
+    get() = callableIdImpl
+
+val IrEnumEntry.callableId: CallableId
+    get() = callableIdImpl
+
+private val IrDeclarationWithName.callableIdImpl: CallableId
+    get() {
+        if (this.symbol is IrClassifierSymbol) error("Classifiers can not have callableId. Got $this")
+        return when (val parent = this.parent) {
+            is IrClass -> parent.classId?.let { CallableId(it, name) }
+            is IrPackageFragment -> CallableId(parent.packageFqName, name)
+            else -> null
+        } ?: error("$this has no callableId")
     }
 
 @Suppress("unused")
@@ -105,11 +140,11 @@ fun IrConstructorCall.isAnnotationWithEqualFqName(fqName: FqName): Boolean =
     annotationClass.hasEqualFqName(fqName)
 
 val IrClass.packageFqName: FqName?
-    get() = symbol.signature?.packageFqName() ?: parent.getPackageFragment()?.fqName
+    get() = symbol.signature?.packageFqName() ?: parent.getPackageFragment()?.packageFqName
 
 fun IrDeclarationWithName.hasEqualFqName(fqName: FqName): Boolean =
     symbol.hasEqualFqName(fqName) || name == fqName.shortName() && when (val parent = parent) {
-        is IrPackageFragment -> parent.fqName == fqName.parent()
+        is IrPackageFragment -> parent.packageFqName == fqName.parent()
         is IrDeclarationWithName -> parent.hasEqualFqName(fqName.parent())
         else -> false
     }
@@ -259,7 +294,7 @@ class NaiveSourceBasedFileEntryImpl(
 }
 
 private fun IrClass.getPropertyDeclaration(name: String): IrProperty? {
-    val properties = declarations.filterIsInstance<IrProperty>().filter { it.name.asString() == name }
+    val properties = declarations.filterIsInstanceAnd<IrProperty> { it.name.asString() == name }
     if (properties.size > 1) {
         error(
             "More than one property with name $name in class $fqNameWhenAvailable:\n" +

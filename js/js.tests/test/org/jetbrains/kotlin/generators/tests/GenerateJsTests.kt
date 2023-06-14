@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.generators.tests
 import org.jetbrains.kotlin.generators.generateTestGroupSuiteWithJUnit5
 import org.jetbrains.kotlin.generators.impl.generateTestGroupSuite
 import org.jetbrains.kotlin.incremental.AbstractJsIrES6InvalidationTest
+import org.jetbrains.kotlin.incremental.AbstractJsIrInvalidationWithPLTest
 import org.jetbrains.kotlin.incremental.AbstractJsIrInvalidationTest
 import org.jetbrains.kotlin.incremental.AbstractJsFirInvalidationTest
 import org.jetbrains.kotlin.js.test.*
@@ -38,22 +39,6 @@ fun main(args: Array<String>) {
             }
         }
 
-        testGroup("js/js.tests/tests-gen", "compiler/testData") {
-            testClass<AbstractJsPartialLinkageWithICTestCase> {
-                model("klibABI/", pattern = "^([^_](.+))$", targetBackend = TargetBackend.JS_IR, recursive = false)
-            }
-        }
-        testGroup("js/js.tests/tests-gen", "compiler/testData") {
-            testClass<AbstractJsPartialLinkageNoICTestCase> {
-                model("klibABI/", pattern = "^([^_](.+))$", targetBackend = TargetBackend.JS_IR, recursive = false)
-            }
-        }
-        testGroup("js/js.tests/tests-gen", "compiler/testData") {
-            testClass<AbstractFirJsPartialLinkageNoICTestCase> {
-                model("klibABI/", pattern = "^([^_](.+))$", targetBackend = TargetBackend.JS_IR, recursive = false)
-            }
-        }
-
         testGroup("js/js.tests/tests-gen", "compiler/testData/binaryCompatibility", testRunnerMethodName = "runTest0") {
             testClass<AbstractClassicJsKlibEvolutionTest> {
                 model("klibEvolution", targetBackend = TargetBackend.JS_IR)
@@ -65,6 +50,27 @@ fun main(args: Array<String>) {
     }
 
     generateTestGroupSuiteWithJUnit5(args) {
+        testGroup("js/js.tests/tests-gen", "compiler/testData") {
+            testClass<AbstractJsPartialLinkageWithICTestCase> {
+                model("klibABI/", pattern = "^([^_](.+))$", targetBackend = TargetBackend.JS_IR, recursive = false)
+            }
+        }
+        testGroup("js/js.tests/tests-gen", "compiler/testData") {
+            testClass<AbstractJsPartialLinkageNoICTestCase> {
+                model("klibABI/", pattern = "^([^_](.+))$", targetBackend = TargetBackend.JS_IR, recursive = false)
+            }
+        }
+        testGroup("js/js.tests/tests-gen", "compiler/testData") {
+            testClass<AbstractJsPartialLinkageNoICES6TestCase> {
+                model("klibABI/", pattern = "^([^_](.+))$", targetBackend = TargetBackend.JS_IR_ES6, recursive = false)
+            }
+        }
+        testGroup("js/js.tests/tests-gen", "compiler/testData") {
+            testClass<AbstractFirJsPartialLinkageNoICTestCase> {
+                model("klibABI/", pattern = "^([^_](.+))$", targetBackend = TargetBackend.JS_IR, recursive = false)
+            }
+        }
+
         testGroup("js/js.tests/tests-gen", "js/js.translator/testData") {
             testClass<AbstractJsIrInvalidationTest> {
                 model("incremental/invalidation/", pattern = "^([^_](.+))$", targetBackend = TargetBackend.JS_IR, recursive = false)
@@ -76,6 +82,10 @@ fun main(args: Array<String>) {
 
             testClass<AbstractJsFirInvalidationTest> {
                 model("incremental/invalidation/", pattern = "^([^_](.+))$", targetBackend = TargetBackend.JS_IR, recursive = false)
+            }
+
+            testClass<AbstractJsIrInvalidationWithPLTest> {
+                model("incremental/invalidationWithPL/", pattern = "^([^_](.+))$", targetBackend = TargetBackend.JS_IR, recursive = false)
             }
         }
 
@@ -220,6 +230,11 @@ fun main(args: Array<String>) {
 //            testClass<AbstractFirJsSteppingTest> {
 //                model("debug/stepping")
 //            }
+
+            testClass<AbstractFirLoadK2CompiledJsKotlinTest> {
+                model("loadJava/compiledKotlin", extension = "kt")
+                model("loadJava/compiledKotlinWithStdlib", extension = "kt")
+            }
         }
     }
 }

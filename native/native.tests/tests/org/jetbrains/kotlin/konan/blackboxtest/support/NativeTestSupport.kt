@@ -112,6 +112,9 @@ private object NativeTestSupport {
     }
 
     private fun ExtensionContext.setUpMemoryTracking() {
+        if (ProcessLevelProperty.TEAMCITY.readValue().toBoolean())
+            return // Don't track memory when running at TeamCity. It tracks memory by itself.
+
         TestLogger.initialize() // Initialize special logging (directly to Gradle's console).
 
         val gradleTaskName = EnvironmentVariable.GRADLE_TASK_NAME.readValue()
@@ -147,13 +150,9 @@ private object NativeTestSupport {
         val enforcedProperties = EnforcedProperties(enclosingTestClass)
 
         val optimizationMode = computeOptimizationMode(enforcedProperties)
-        val memoryModel = computeMemoryModel(enforcedProperties)
 
         val threadStateChecker = computeThreadStateChecker(enforcedProperties)
         if (threadStateChecker == ThreadStateChecker.ENABLED) {
-            assertEquals(MemoryModel.EXPERIMENTAL, memoryModel) {
-                "Thread state checker can be enabled only with experimental memory model"
-            }
             assertEquals(OptimizationMode.DEBUG, optimizationMode) {
                 "Thread state checker can be enabled only with debug optimization mode"
             }
@@ -161,18 +160,10 @@ private object NativeTestSupport {
         val sanitizer = computeSanitizer(enforcedProperties)
 
         val gcType = computeGCType(enforcedProperties)
-        if (gcType != GCType.UNSPECIFIED) {
-            assertEquals(MemoryModel.EXPERIMENTAL, memoryModel) {
-                "GC type can be specified only with experimental memory model"
-            }
-        }
 
         val gcScheduler = computeGCScheduler(enforcedProperties)
-        if (gcScheduler != GCScheduler.UNSPECIFIED) {
-            assertEquals(MemoryModel.EXPERIMENTAL, memoryModel) {
-                "GC scheduler can be specified only with experimental memory model"
-            }
-        }
+
+        val allocator = computeAllocator(enforcedProperties)
 
         val nativeHome = getOrCreateTestProcessSettings().get<KotlinNativeHome>()
 
@@ -191,10 +182,10 @@ private object NativeTestSupport {
         }
 
         output += optimizationMode
-        output += memoryModel
         output += threadStateChecker
         output += gcType
         output += gcScheduler
+        output += allocator
         output += nativeTargets
         output += sanitizer
         output += CacheMode::class to cacheMode
@@ -218,9 +209,6 @@ private object NativeTestSupport {
             default = OptimizationMode.DEBUG
         )
 
-    private fun computeMemoryModel(enforcedProperties: EnforcedProperties): MemoryModel =
-        ClassLevelProperty.MEMORY_MODEL.readValue(enforcedProperties, MemoryModel.values(), default = MemoryModel.EXPERIMENTAL)
-
     private fun computeThreadStateChecker(enforcedProperties: EnforcedProperties): ThreadStateChecker {
         val useThreadStateChecker =
             ClassLevelProperty.USE_THREAD_STATE_CHECKER.readValue(enforcedProperties, String::toBooleanStrictOrNull, default = false)
@@ -242,6 +230,9 @@ private object NativeTestSupport {
 
     private fun computeGCScheduler(enforcedProperties: EnforcedProperties): GCScheduler =
         ClassLevelProperty.GC_SCHEDULER.readValue(enforcedProperties, GCScheduler.values(), default = GCScheduler.UNSPECIFIED)
+
+    private fun computeAllocator(enforcedProperties: EnforcedProperties): Allocator =
+        ClassLevelProperty.ALLOCATOR.readValue(enforcedProperties, Allocator.values(), default = Allocator.UNSPECIFIED)
 
     private fun computeNativeTargets(enforcedProperties: EnforcedProperties, hostManager: HostManager): KotlinNativeTargets {
         val hostTarget = HostManager.host
@@ -337,7 +328,7 @@ private object NativeTestSupport {
 
                 // Put settings that are always required:
                 this += computedTestConfiguration
-                this += computeBinariesDirs(testProcessSettings.get(), nativeTargets, enclosingTestClass)
+                this += computeBinariesForBlackBoxTests(testProcessSettings.get(), nativeTargets, enclosingTestClass)
 
                 // Add custom settings:
                 computedTestConfiguration.configuration.requiredSettings.forEach { clazz ->
@@ -435,21 +426,22 @@ private object NativeTestSupport {
         return GeneratedSources(testSourcesDir, sharedSourcesDir)
     }
 
-    private fun computeBinariesDirs(baseDirs: BaseDirs, targets: KotlinNativeTargets, enclosingTestClass: Class<*>): Binaries {
+    /** See also [computeBinariesForSimpleTests] */
+    private fun computeBinariesForBlackBoxTests(
+        baseDirs: BaseDirs,
+        targets: KotlinNativeTargets,
+        enclosingTestClass: Class<*>
+    ): Binaries {
         val testBinariesDir = baseDirs.testBuildDir
             .resolve("bb.out") // "bb" for black box
             .resolve("${targets.testTarget.compressedName}_${enclosingTestClass.compressedSimpleName}")
             .ensureExistsAndIsEmptyDirectory() // Clean-up the directory with all potentially stale artifacts.
 
-        val sharedBinariesDir = testBinariesDir
-            .resolve(SHARED_MODULES_DIR_NAME)
-            .ensureExistsAndIsEmptyDirectory()
-
-        val givenBinariesDir = testBinariesDir
-            .resolve(GIVEN_MODULES_DIR_NAME)
-            .ensureExistsAndIsEmptyDirectory()
-
-        return Binaries(testBinariesDir, sharedBinariesDir, givenBinariesDir)
+        return Binaries(
+            testBinariesDir = testBinariesDir,
+            lazySharedBinariesDir = { testBinariesDir.resolve(SHARED_MODULES_DIR_NAME).ensureExistsAndIsEmptyDirectory() },
+            lazyGivenBinariesDir = { testBinariesDir.resolve(GIVEN_MODULES_DIR_NAME).ensureExistsAndIsEmptyDirectory() }
+        )
     }
 
     private fun computePipelineType(testClass: Class<*>): PipelineType {
@@ -515,23 +507,28 @@ private object NativeTestSupport {
             parent = testClassSettings,
             listOf(
                 computeSimpleTestInstances(),
-                computeSimpleTestDirectories(testClassSettings.get(), testClassSettings.get())
+                computeBinariesForSimpleTests(testClassSettings.get(), testClassSettings.get())
             )
         )
     }
 
     private fun ExtensionContext.computeSimpleTestInstances(): SimpleTestInstances = SimpleTestInstances(requiredTestInstances.allInstances)
 
-    private fun ExtensionContext.computeSimpleTestDirectories(baseDirs: BaseDirs, targets: KotlinNativeTargets): SimpleTestDirectories {
+    /** See also [computeBinariesForBlackBoxTests] */
+    private fun ExtensionContext.computeBinariesForSimpleTests(baseDirs: BaseDirs, targets: KotlinNativeTargets): Binaries {
         val compressedClassNames = testClasses.map(Class<*>::compressedSimpleName).joinToString(separator = "_")
 
-        val testBuildDir = baseDirs.testBuildDir
+        val testBinariesDir = baseDirs.testBuildDir
             .resolve("s") // "s" for simple
             .resolve("${targets.testTarget.compressedName}_$compressedClassNames")
             .resolve(requiredTestMethod.name)
             .ensureExistsAndIsEmptyDirectory() // Clean-up the directory with all potentially stale artifacts.
 
-        return SimpleTestDirectories(testBuildDir)
+        return Binaries(
+            testBinariesDir = testBinariesDir,
+            lazySharedBinariesDir = { testBinariesDir.resolve(SHARED_MODULES_DIR_NAME).ensureExistsAndIsEmptyDirectory() },
+            lazyGivenBinariesDir = { testBinariesDir.resolve(GIVEN_MODULES_DIR_NAME).ensureExistsAndIsEmptyDirectory() }
+        )
     }
 
     /*************** Test run provider (for black box tests only) ***************/

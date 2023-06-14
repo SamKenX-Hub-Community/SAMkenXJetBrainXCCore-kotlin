@@ -17,6 +17,9 @@ internal class ListBuilder<E> private constructor(
     private val backing: ListBuilder<E>?,
     private val root: ListBuilder<E>?
 ) : MutableList<E>, RandomAccess, AbstractMutableList<E>(), Serializable {
+    private companion object {
+        private val Empty = ListBuilder<Nothing>(0).also { it.isReadOnly = true }
+    }
 
     constructor() : this(10)
 
@@ -27,7 +30,7 @@ internal class ListBuilder<E> private constructor(
         if (backing != null) throw IllegalStateException() // just in case somebody casts subList to ListBuilder
         checkIsMutable()
         isReadOnly = true
-        return this
+        return if (length > 0) this else Empty
     }
 
     private fun writeReplace(): Any =
@@ -176,15 +179,6 @@ internal class ListBuilder<E> private constructor(
 
     // ---------------------------- private ----------------------------
 
-    private fun ensureCapacity(minCapacity: Int) {
-        if (backing != null) throw IllegalStateException() // just in case somebody casts subList to ListBuilder
-        if (minCapacity < 0) throw OutOfMemoryError()    // overflow
-        if (minCapacity > array.size) {
-            val newSize = ArrayDeque.newCapacity(array.size, minCapacity)
-            array = array.copyOfUninitializedElements(newSize)
-        }
-    }
-
     private fun checkIsMutable() {
         if (isEffectivelyReadOnly) throw UnsupportedOperationException()
     }
@@ -193,7 +187,15 @@ internal class ListBuilder<E> private constructor(
         get() = isReadOnly || root != null && root.isReadOnly
 
     private fun ensureExtraCapacity(n: Int) {
-        ensureCapacity(length + n)
+        ensureCapacityInternal(length + n)
+    }
+
+    private fun ensureCapacityInternal(minCapacity: Int) {
+        if (minCapacity < 0) throw OutOfMemoryError()    // overflow
+        if (minCapacity > array.size) {
+            val newSize = AbstractList.newCapacity(array.size, minCapacity)
+            array = array.copyOfUninitializedElements(newSize)
+        }
     }
 
     private fun contentEquals(other: List<*>): Boolean {

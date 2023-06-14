@@ -5,6 +5,7 @@
 
 #include "ExtraObjectData.hpp"
 
+#include "MainQueueProcessor.hpp"
 #include "PointerBits.h"
 #include "ThreadData.hpp"
 
@@ -37,7 +38,7 @@ mm::ExtraObjectData& mm::ExtraObjectData::Install(ObjHeader* object) noexcept {
 
     if (!compareExchange(object->typeInfoOrMeta_, typeInfo, reinterpret_cast<TypeInfo*>(&data))) {
         // Somebody else created `mm::ExtraObjectData` for this object.
-        data.setFlag(mm::ExtraObjectData::FLAGS_FINALIZED);
+        data.setFlag(mm::ExtraObjectData::FLAGS_SWEEPABLE);
 #else
     auto& data = mm::ExtraObjectDataFactory::Instance().CreateExtraObjectDataForObject(threadData, object, typeInfo);
 
@@ -51,17 +52,32 @@ mm::ExtraObjectData& mm::ExtraObjectData::Install(ObjHeader* object) noexcept {
     return data;
 }
 
-void mm::ExtraObjectData::Uninstall() noexcept {
+void mm::ExtraObjectData::UnlinkFromBaseObject() noexcept {
     auto *object = GetBaseObject();
     atomicSetRelease(const_cast<const TypeInfo**>(&object->typeInfoOrMeta_), typeInfo_);
     RuntimeAssert(
             !object->has_meta_object(), "Object %p has metaobject %p after removing metaobject %p", object, object->meta_object_or_null(),
             this);
+}
 
+void mm::ExtraObjectData::ReleaseAssociatedObject() noexcept {
 #ifdef KONAN_OBJC_INTEROP
-    Kotlin_ObjCExport_releaseAssociatedObject(associatedObject_);
-    associatedObject_ = nullptr;
+    if (void* associatedObject = associatedObject_) {
+        if (getFlag(FLAGS_RELEASE_ON_MAIN_QUEUE) && isMainQueueProcessorAvailable()) {
+            runOnMainQueue(associatedObject, [](void* obj) {
+                Kotlin_ObjCExport_releaseAssociatedObject(obj);
+            });
+        } else {
+            Kotlin_ObjCExport_releaseAssociatedObject(associatedObject);
+        }
+        associatedObject_ = nullptr;
+    }
 #endif
+}
+
+void mm::ExtraObjectData::Uninstall() noexcept {
+    UnlinkFromBaseObject();
+    ReleaseAssociatedObject();
 }
 
 bool mm::ExtraObjectData::HasAssociatedObject() noexcept {

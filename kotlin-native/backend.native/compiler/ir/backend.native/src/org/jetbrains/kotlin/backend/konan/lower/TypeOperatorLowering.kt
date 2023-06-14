@@ -14,6 +14,8 @@ import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
 import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
+import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
+import org.jetbrains.kotlin.ir.symbols.IrScriptSymbol
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
@@ -36,7 +38,7 @@ internal fun IrType.erasure(): IrType {
             // In the second case, there is only a single supertype.
             classifier.owner.superTypes.first().erasure()
         }
-        else -> TODO(classifier.toString())
+        is IrScriptSymbol -> classifier.unexpectedSymbolKind<IrClassifierSymbol>()
     }
 
     return upperBound.mergeNullability(this)
@@ -53,37 +55,10 @@ internal class TypeOperatorLowering(val context: CommonBackendContext) : FileLow
     private fun lowerCast(expression: IrTypeOperatorCall): IrExpression {
         builder.at(expression)
         val typeOperand = expression.typeOperand.erasure()
-
-//        assert (!TypeUtils.hasNullableSuperType(typeOperand)) // So that `isNullable()` <=> `isMarkedNullable`.
-
-        // TODO: consider the case when expression type is wrong e.g. due to generics-related unchecked casts.
-
-        return when {
-            expression.argument.type.isSubtypeOf(typeOperand, context.typeSystem) -> expression.argument
-
-            expression.argument.type.isNullable() -> {
-                with(builder) {
-                    irLetS(expression.argument) { argument ->
-                        irIfThenElse(
-                                type = expression.type,
-                                condition = irEqeqeq(irGet(argument.owner), irNull()),
-
-                                thenPart = if (typeOperand.isNullable())
-                                    irNull()
-                                else
-                                    irCall(this@TypeOperatorLowering.context.ir.symbols.throwNullPointerException.owner),
-
-                                elsePart = irAs(irGet(argument.owner), typeOperand.makeNotNull())
-                        )
-                    }
-                }
-            }
-
-            typeOperand.isMarkedNullable() -> builder.irAs(expression.argument, typeOperand.makeNotNull())
-
-            typeOperand == expression.typeOperand -> expression
-
-            else -> builder.irAs(expression.argument, typeOperand)
+        return if (typeOperand == expression.typeOperand) {
+            expression
+        } else {
+            builder.irAs(expression.argument, typeOperand)
         }
     }
 

@@ -10,8 +10,10 @@ import org.jetbrains.kotlin.analysis.low.level.api.fir.element.builder.Duplicate
 import org.jetbrains.kotlin.analysis.low.level.api.fir.util.isErrorElement
 import org.jetbrains.kotlin.fir.FirElement
 import org.jetbrains.kotlin.fir.builder.toFirOperationOrNull
+import org.jetbrains.kotlin.fir.declarations.FirTypeParameter
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.expressions.builder.buildConstExpression
+import org.jetbrains.kotlin.fir.psi
 import org.jetbrains.kotlin.fir.references.*
 import org.jetbrains.kotlin.fir.types.FirErrorTypeRef
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
@@ -64,6 +66,14 @@ internal open class FirElementsRecorder : FirVisitor<Unit, MutableMap<KtElement,
         element.acceptChildren(this, data)
     }
 
+    override fun visitTypeParameter(typeParameter: FirTypeParameter, data: MutableMap<KtElement, FirElement>) {
+        for (bound in typeParameter.bounds) {
+            val constraintSubject = (bound.psi?.parent as? KtTypeConstraint)?.subjectTypeParameterName ?: continue
+            cache(constraintSubject, typeParameter, data)
+        }
+        super.visitTypeParameter(typeParameter, data)
+    }
+
     override fun visitVariableAssignment(variableAssignment: FirVariableAssignment, data: MutableMap<KtElement, FirElement>) {
         // For the LHS of the assignment, record the assignment itself
         (variableAssignment.lValue.source?.psi as? KtElement)?.let { cache(it, variableAssignment, data) }
@@ -95,11 +105,13 @@ internal open class FirElementsRecorder : FirVisitor<Unit, MutableMap<KtElement,
 
     override fun visitErrorTypeRef(errorTypeRef: FirErrorTypeRef, data: MutableMap<KtElement, FirElement>) {
         super.visitResolvedTypeRef(errorTypeRef, data)
+        recordTypeQualifiers(errorTypeRef, data)
         errorTypeRef.delegatedTypeRef?.accept(this, data)
     }
 
     override fun visitResolvedTypeRef(resolvedTypeRef: FirResolvedTypeRef, data: MutableMap<KtElement, FirElement>) {
         super.visitResolvedTypeRef(resolvedTypeRef, data)
+        recordTypeQualifiers(resolvedTypeRef, data)
         resolvedTypeRef.delegatedTypeRef?.accept(this, data)
     }
 
@@ -206,6 +218,17 @@ internal open class FirElementsRecorder : FirVisitor<Unit, MutableMap<KtElement,
             convertedValue as T
         ).also {
             it.replaceTypeRef(original.typeRef)
+        }
+    }
+
+    private fun recordTypeQualifiers(resolvedTypeRef: FirResolvedTypeRef, data: MutableMap<KtElement, FirElement>) {
+        val userTypeRef = resolvedTypeRef.delegatedTypeRef as? FirUserTypeRef ?: return
+        val qualifiers = userTypeRef.qualifier
+        if (qualifiers.size <= 1) return
+        qualifiers.forEachIndexed { index, qualifierPart ->
+            if (index == qualifiers.lastIndex) return@forEachIndexed
+            val source = qualifierPart.source?.psi as? KtElement ?: return@forEachIndexed
+            cache(source, resolvedTypeRef, data)
         }
     }
 
