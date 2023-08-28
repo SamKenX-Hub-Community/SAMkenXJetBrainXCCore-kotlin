@@ -5,6 +5,8 @@
 
 package org.jetbrains.kotlin.fir.analysis.checkers.declaration
 
+import org.jetbrains.kotlin.KtFakeSourceElement
+import org.jetbrains.kotlin.KtFakeSourceElementKind
 import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.diagnostics.DiagnosticReporter
 import org.jetbrains.kotlin.diagnostics.reportOn
@@ -12,6 +14,7 @@ import org.jetbrains.kotlin.fir.analysis.checkers.context.CheckerContext
 import org.jetbrains.kotlin.fir.analysis.checkers.expression.FirDeprecationChecker
 import org.jetbrains.kotlin.fir.analysis.checkers.unsubstitutedScope
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors
+import org.jetbrains.kotlin.fir.analysis.diagnostics.toInvisibleReferenceDiagnostic
 import org.jetbrains.kotlin.fir.analysis.getSourceForImportSegment
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.declarations.utils.isEnumClass
@@ -21,6 +24,7 @@ import org.jetbrains.kotlin.fir.declarations.utils.visibility
 import org.jetbrains.kotlin.fir.resolve.providers.firProvider
 import org.jetbrains.kotlin.fir.resolve.providers.getContainingFile
 import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
+import org.jetbrains.kotlin.fir.resolve.providers.toSymbol
 import org.jetbrains.kotlin.fir.scopes.FirContainingNamesAwareScope
 import org.jetbrains.kotlin.fir.scopes.impl.declaredMemberScope
 import org.jetbrains.kotlin.fir.symbols.SymbolInternals
@@ -75,7 +79,7 @@ object FirImportsChecker : FirFileChecker() {
             fun reportInvisibleParentClasses(classSymbol: FirRegularClassSymbol, depth: Int) {
                 if (!classSymbol.fir.isVisible(context)) {
                     val source = import.getSourceForImportSegment(indexFromLast = depth)
-                    reporter.reportOn(source, FirErrors.INVISIBLE_REFERENCE, classSymbol, context)
+                    reporter.report(classSymbol.toInvisibleReferenceDiagnostic(source), context)
                 }
 
                 classSymbol.classId.outerClassId?.resolveToClass(context)?.let { reportInvisibleParentClasses(it, depth + 1) }
@@ -87,7 +91,7 @@ object FirImportsChecker : FirFileChecker() {
                 ImportStatus.OK -> return
                 is ImportStatus.Invisible -> {
                     val source = import.getSourceForImportSegment(0)
-                    reporter.reportOn(source, FirErrors.INVISIBLE_REFERENCE, status.symbol, context)
+                    reporter.report(status.symbol.toInvisibleReferenceDiagnostic(source), context)
                 }
                 else -> {
                     val classId = parentClassSymbol.classId.createNestedClassId(importedName)
@@ -128,7 +132,7 @@ object FirImportsChecker : FirFileChecker() {
 
         resolvedDeclaration?.let {
             val source = import.getSourceForImportSegment(0) ?: import.source
-            reporter.reportOn(source, FirErrors.INVISIBLE_REFERENCE, it.symbol, context)
+            reporter.report(it.symbol.toInvisibleReferenceDiagnostic(source), context)
             return
         }
 
@@ -165,7 +169,7 @@ object FirImportsChecker : FirFileChecker() {
                 !import.isAllUnder &&
                         import.importedName?.identifierOrNullIfSpecial?.isNotEmpty() == true &&
                         import.resolvesToClass(context)
-            }
+            }.filterNot { (it.source as? KtFakeSourceElement)?.kind == KtFakeSourceElementKind.ImplicitImport  }
         interestingImports
             .groupBy { it.aliasName ?: it.importedName!! }
             .values
@@ -297,7 +301,7 @@ object FirImportsChecker : FirFileChecker() {
         val importedFqName = import.importedFqName ?: return
         if (importedFqName.isRoot || importedFqName.shortName().asString().isEmpty()) return
         val classId = (import as? FirResolvedImport)?.resolvedParentClassId ?: ClassId.topLevel(importedFqName)
-        val classLike: FirRegularClassSymbol = classId.resolveToClass(context) ?: return
-        FirDeprecationChecker.reportApiStatusIfNeeded(import.source, classLike, context, reporter)
+        val symbol = classId.toSymbol(context.session) ?: return
+        FirDeprecationChecker.reportApiStatusIfNeeded(import.source, symbol, context, reporter)
     }
 }

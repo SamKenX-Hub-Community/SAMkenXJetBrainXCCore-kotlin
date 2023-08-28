@@ -23,6 +23,11 @@ internal fun checkDiagnosticsWithMppProject(projectName: String, projectConfigur
     project.checkDiagnostics(projectName)
 }
 
+internal fun ToolingDiagnostic.equals(that: ToolingDiagnostic, ignoreThrowable: Boolean) = if (ignoreThrowable) {
+    this.id == that.id && this.message == that.message && this.severity == that.severity
+} else {
+    this == that
+}
 
 /**
  * [compactRendering] == true will omit projects with no diagnostics from the report, as well as
@@ -68,19 +73,56 @@ internal fun Project.assertNoDiagnostics() {
     )
 }
 
-internal fun Project.assertContainsDiagnostic(diagnostic: ToolingDiagnostic) {
-    kotlinToolingDiagnosticsCollector.getDiagnosticsForProject(this).assertContainsDiagnostic(diagnostic)
+/**
+ * Checks that diagnostic with [factory.id] is reported. The exact parameters (if any)
+ * are ignored. If you need to compare the parameters, refer to the overload accepting [ToolingDiagnostic]
+ */
+internal fun Project.assertContainsDiagnostic(factory: ToolingDiagnosticFactory) {
+    kotlinToolingDiagnosticsCollector.getDiagnosticsForProject(this).assertContainsDiagnostic(factory)
 }
 
-internal fun Collection<ToolingDiagnostic>.assertContainsDiagnostic(diagnostic: ToolingDiagnostic) {
-    fun Any.withIndent() = this.toString().prependIndent("    ")
-    if (diagnostic !in this) {
-        fail("Missing diagnostic\n${diagnostic.withIndent()} \nin:\n${this.render().withIndent()}")
+internal fun Project.assertContainsDiagnostic(diagnostic: ToolingDiagnostic, ignoreThrowable: Boolean = false) {
+    kotlinToolingDiagnosticsCollector.getDiagnosticsForProject(this)
+        .assertContainsDiagnostic(diagnostic, ignoreThrowable)
+}
+
+private fun Any.withIndent() = this.toString().prependIndent("    ")
+
+internal fun Collection<ToolingDiagnostic>.assertContainsDiagnostic(factory: ToolingDiagnosticFactory) {
+    if (!any { it.id == factory.id }) failDiagnosticNotFound("diagnostic with id ${factory.id} ", this)
+}
+
+internal fun Collection<ToolingDiagnostic>.assertContainsDiagnostic(diagnostic: ToolingDiagnostic, ignoreThrowable: Boolean = false) {
+    if (none { it.equals(diagnostic, ignoreThrowable) }) failDiagnosticNotFound("diagnostic $diagnostic\n", this)
+}
+
+private fun failDiagnosticNotFound(diagnosticDescription: String, notFoundInCollection: Collection<ToolingDiagnostic>) {
+    fail("Missing ${diagnosticDescription}in:\n${notFoundInCollection.render().withIndent()}")
+}
+
+internal fun Collection<ToolingDiagnostic>.assertDiagnostics(vararg diagnostics: ToolingDiagnostic) {
+    val expectedDiagnostics = diagnostics.toSet()
+    val actualDiagnostic = this.toSet()
+    if (expectedDiagnostics == actualDiagnostic) return
+
+    val missingDiagnostics = this - expectedDiagnostics
+    val unexpectedDiagnostics = expectedDiagnostics - this
+
+    val errorMessage = buildString {
+        if (missingDiagnostics.isNotEmpty()) {
+            appendLine(missingDiagnostics.joinToString(prefix = "Missing diagnostic\n", separator = "\n") { it.withIndent() })
+        }
+        if (unexpectedDiagnostics.isNotEmpty()) {
+            appendLine(unexpectedDiagnostics.joinToString(prefix = "Unexpected diagnostic\n", separator = "\n") { it.withIndent() })
+        }
+        appendLine("in: \n${actualDiagnostic.render().withIndent()}")
     }
+
+    fail(errorMessage)
 }
 
-internal fun Project.assertNoDiagnostics(id: String) {
-    kotlinToolingDiagnosticsCollector.getDiagnosticsForProject(this).assertNoDiagnostics(id)
+internal fun Project.assertNoDiagnostics(factory: ToolingDiagnosticFactory) {
+    kotlinToolingDiagnosticsCollector.getDiagnosticsForProject(this).assertNoDiagnostics(factory.id)
 }
 
 internal fun Collection<ToolingDiagnostic>.assertNoDiagnostics(id: String) {
@@ -100,4 +142,3 @@ private val expectedDiagnosticsRoot: Path
     get() = resourcesRoot.resolve("expectedDiagnostics")
 
 private fun expectedDiagnosticsFile(projectName: String): File = expectedDiagnosticsRoot.resolve("$projectName.txt").toFile()
-

@@ -311,6 +311,12 @@ public class FirIdeNormalAnalysisLibrarySourceModuleReferenceResolveTestGenerate
     }
 
     @Test
+    @TestMetadata("InOperator.kt")
+    public void testInOperator() throws Exception {
+        runTest("analysis/analysis-api/testData/referenceResolve/InOperator.kt");
+    }
+
+    @Test
     @TestMetadata("InVaragReferenceInFunctionBody.kt")
     public void testInVaragReferenceInFunctionBody() throws Exception {
         runTest("analysis/analysis-api/testData/referenceResolve/InVaragReferenceInFunctionBody.kt");
@@ -371,6 +377,12 @@ public class FirIdeNormalAnalysisLibrarySourceModuleReferenceResolveTestGenerate
     }
 
     @Test
+    @TestMetadata("LabelsReturn.kt")
+    public void testLabelsReturn() throws Exception {
+        runTest("analysis/analysis-api/testData/referenceResolve/LabelsReturn.kt");
+    }
+
+    @Test
     @TestMetadata("MultiDeclarationExtension.kt")
     public void testMultiDeclarationExtension() throws Exception {
         runTest("analysis/analysis-api/testData/referenceResolve/MultiDeclarationExtension.kt");
@@ -392,6 +404,12 @@ public class FirIdeNormalAnalysisLibrarySourceModuleReferenceResolveTestGenerate
     @TestMetadata("NotEqualsOperator.kt")
     public void testNotEqualsOperator() throws Exception {
         runTest("analysis/analysis-api/testData/referenceResolve/NotEqualsOperator.kt");
+    }
+
+    @Test
+    @TestMetadata("NotInOperator.kt")
+    public void testNotInOperator() throws Exception {
+        runTest("analysis/analysis-api/testData/referenceResolve/NotInOperator.kt");
     }
 
     @Test
@@ -1156,6 +1174,52 @@ public class FirIdeNormalAnalysisLibrarySourceModuleReferenceResolveTestGenerate
         }
 
         @Nested
+        @TestMetadata("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations")
+        @TestDataPath("$PROJECT_ROOT")
+        public class JavaDeclarations {
+            @Test
+            public void testAllFilesPresentInJavaDeclarations() throws Exception {
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations"), Pattern.compile("^([^.]+)\\.kt$"), null, true, "withErrors");
+            }
+
+            @Test
+            @TestMetadata("StaticFieldQualified.kt")
+            public void testStaticFieldQualified() throws Exception {
+                runTest("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations/StaticFieldQualified.kt");
+            }
+
+            @Test
+            @TestMetadata("StaticFunctionFromBaseClass.kt")
+            public void testStaticFunctionFromBaseClass() throws Exception {
+                runTest("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations/StaticFunctionFromBaseClass.kt");
+            }
+
+            @Test
+            @TestMetadata("StaticFunctionFullyQualified.kt")
+            public void testStaticFunctionFullyQualified() throws Exception {
+                runTest("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations/StaticFunctionFullyQualified.kt");
+            }
+
+            @Test
+            @TestMetadata("StaticFunctionQualified.kt")
+            public void testStaticFunctionQualified() throws Exception {
+                runTest("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations/StaticFunctionQualified.kt");
+            }
+
+            @Test
+            @TestMetadata("StaticFunctionQualifiedWithJavaSubclass.kt")
+            public void testStaticFunctionQualifiedWithJavaSubclass() throws Exception {
+                runTest("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations/StaticFunctionQualifiedWithJavaSubclass.kt");
+            }
+
+            @Test
+            @TestMetadata("StaticFunctionQualifiedWithKotlinSubclass.kt")
+            public void testStaticFunctionQualifiedWithKotlinSubclass() throws Exception {
+                runTest("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations/StaticFunctionQualifiedWithKotlinSubclass.kt");
+            }
+        }
+
+        @Nested
         @TestMetadata("analysis/analysis-api/testData/referenceResolve/kDoc/localContext")
         @TestDataPath("$PROJECT_ROOT")
         public class LocalContext {
@@ -1807,6 +1871,12 @@ public class FirIdeNormalAnalysisLibrarySourceModuleReferenceResolveTestGenerate
         @TestMetadata("multipleBounds.kt")
         public void testMultipleBounds() throws Exception {
             runTest("analysis/analysis-api/testData/referenceResolve/typeParameter/multipleBounds.kt");
+        }
+
+        @Test
+        @TestMetadata("reifiedTypeParameterInBody.kt")
+        public void testReifiedTypeParameterInBody() throws Exception {
+            runTest("analysis/analysis-api/testData/referenceResolve/typeParameter/reifiedTypeParameterInBody.kt");
         }
 
         @Test

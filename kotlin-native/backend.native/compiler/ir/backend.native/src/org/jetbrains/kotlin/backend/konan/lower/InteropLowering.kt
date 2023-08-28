@@ -6,7 +6,7 @@
 package org.jetbrains.kotlin.backend.konan.lower
 
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
-import org.jetbrains.kotlin.backend.common.ir.inlineFunction
+import org.jetbrains.kotlin.ir.util.inlineFunction
 import org.jetbrains.kotlin.backend.common.lower.*
 import org.jetbrains.kotlin.backend.common.peek
 import org.jetbrains.kotlin.backend.common.pop
@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
@@ -34,7 +35,7 @@ import org.jetbrains.kotlin.ir.expressions.impl.IrConstImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrDelegatingConstructorCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrFunctionReferenceImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrReturnImpl
-import org.jetbrains.kotlin.ir.interpreter.toIrConst
+import org.jetbrains.kotlin.ir.util.toIrConst
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
@@ -50,6 +51,7 @@ import org.jetbrains.kotlin.konan.ForeignExceptionMode
 import org.jetbrains.kotlin.konan.library.KonanLibrary
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.native.interop.ObjCMethodInfo
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
 
@@ -64,6 +66,7 @@ internal class InteropLowering(generationState: NativeGenerationState) : FileLow
     }
 }
 
+@OptIn(ObsoleteDescriptorBasedAPI::class)
 private abstract class BaseInteropIrTransformer(
         private val generationState: NativeGenerationState
 ) : IrBuildingTransformer(generationState.context) {
@@ -136,6 +139,7 @@ private abstract class BaseInteropIrTransformer(
     protected abstract fun addTopLevel(declaration: IrDeclaration)
 }
 
+@OptIn(ObsoleteDescriptorBasedAPI::class)
 private class InteropLoweringPart1(val generationState: NativeGenerationState) : BaseInteropIrTransformer(generationState), FileLoweringPass {
     private val context = generationState.context
 
@@ -778,6 +782,7 @@ private class InteropLoweringPart2(val generationState: NativeGenerationState) :
     }
 }
 
+@OptIn(ObsoleteDescriptorBasedAPI::class)
 private class InteropTransformer(
         val generationState: NativeGenerationState,
         override val irFile: IrFile

@@ -20,10 +20,12 @@ import org.jetbrains.kotlin.analysis.api.symbols.markers.KtSymbolWithKind
 import org.jetbrains.kotlin.analysis.low.level.api.fir.sessions.llFirSession
 import org.jetbrains.kotlin.analysis.low.level.api.fir.util.originalDeclaration
 import org.jetbrains.kotlin.analysis.project.structure.KtModule
-import org.jetbrains.kotlin.analysis.utils.errors.buildErrorWithAttachment
+import org.jetbrains.kotlin.utils.exceptions.errorWithAttachment
 import org.jetbrains.kotlin.analysis.utils.printer.parentOfType
 import org.jetbrains.kotlin.fir.analysis.checkers.getContainingClassSymbol
+import org.jetbrains.kotlin.fir.diagnostics.ConeDestructuringDeclarationsOnTopLevel
 import org.jetbrains.kotlin.fir.resolve.providers.firProvider
+import org.jetbrains.kotlin.fir.symbols.impl.FirErrorPropertySymbol
 import org.jetbrains.kotlin.psi
 import org.jetbrains.kotlin.psi.*
 
@@ -38,6 +40,8 @@ internal class KtFirSymbolContainingDeclarationProvider(
 
         if (symbol !is KtDeclarationSymbol) return null
         if (symbol is KtSymbolWithKind && symbol.symbolKind == KtSymbolKind.TOP_LEVEL) return null
+        val firSymbol = symbol.firSymbol
+        if (firSymbol is FirErrorPropertySymbol && firSymbol.diagnostic is ConeDestructuringDeclarationsOnTopLevel) return null
         fun getParentSymbolByPsi() = getContainingPsi(symbol).let { with(analysisSession) { it.getSymbol() } }
         return when (symbol) {
             is KtPropertyAccessorSymbol -> firSymbolBuilder.buildSymbol(symbol.firSymbol.fir.propertySymbol) as? KtDeclarationSymbol
@@ -46,6 +50,7 @@ internal class KtFirSymbolContainingDeclarationProvider(
             is KtLocalVariableSymbol -> getParentSymbolByPsi()
             is KtAnonymousFunctionSymbol -> getParentSymbolByPsi()
             is KtAnonymousObjectSymbol -> getParentSymbolByPsi()
+            is KtDestructuringDeclarationSymbol -> getParentSymbolByPsi()
 
             is KtSamConstructorSymbol -> null // SAM constructors are always top-level
             is KtScriptSymbol -> null // Scripts are always top-level
@@ -83,7 +88,7 @@ internal class KtFirSymbolContainingDeclarationProvider(
     private fun getContainingPsi(symbol: KtSymbol): KtDeclaration {
         val source = symbol.firSymbol.source
         val thisSource = when (source?.kind) {
-            null -> buildErrorWithAttachment("PSI should present for declaration built by Kotlin code") {
+            null -> errorWithAttachment("PSI should present for declaration built by Kotlin code") {
                 withSymbolAttachment("symbolForContainingPsi", symbol, analysisSession)
             }
 
@@ -92,19 +97,19 @@ internal class KtFirSymbolContainingDeclarationProvider(
             KtFakeSourceElementKind.EnumInitializer -> return source.psi as KtEnumEntry
             KtRealSourceElementKind -> source.psi!!
             else ->
-                buildErrorWithAttachment("errorWithAttachment FirSourceElement: kind=${source.kind} element=${source.psi!!::class.simpleName}") {
+                errorWithAttachment("errorWithAttachment FirSourceElement: kind=${source.kind} element=${source.psi!!::class.simpleName}") {
                     withSymbolAttachment("symbolForContainingPsi", symbol, analysisSession)
                 }
         }
 
         return when (symbol.origin) {
             KtSymbolOrigin.SOURCE -> thisSource.getContainingKtDeclaration()
-                ?: buildErrorWithAttachment("Containing declaration should present for non-toplevel declaration ${thisSource::class}") {
+                ?: errorWithAttachment("Containing declaration should present for non-toplevel declaration ${thisSource::class}") {
                     withSymbolAttachment("symbolForContainingPsi", symbol, analysisSession)
                 }
 
             KtSymbolOrigin.SOURCE_MEMBER_GENERATED -> thisSource as KtDeclaration
-            else -> buildErrorWithAttachment("Unsupported declaration origin ${symbol.origin} ${thisSource::class}") {
+            else -> errorWithAttachment("Unsupported declaration origin ${symbol.origin} ${thisSource::class}") {
                 withSymbolAttachment("symbolForContainingPsi", symbol, analysisSession)
             }
         }

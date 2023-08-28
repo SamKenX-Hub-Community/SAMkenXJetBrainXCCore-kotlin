@@ -16,6 +16,7 @@ import org.gradle.api.file.ProjectLayout
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.tasks.*
+import org.gradle.work.DisableCachingByDefault
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
 import org.jetbrains.kotlin.gradle.targets.metadata.dependsOnClosureWithInterCompilationDependencies
 import org.jetbrains.kotlin.gradle.tasks.dependsOn
@@ -50,6 +51,7 @@ internal fun Project.locateOrRegisterMetadataDependencyTransformationTask(
     return transformationTask
 }
 
+@DisableCachingByDefault(because = "Metadata Dependency Transformation Task doesn't benefit from caching as it doesn't have heavy load")
 open class MetadataDependencyTransformationTask
 @Inject constructor(
     kotlinSourceSet: KotlinSourceSet,
@@ -93,6 +95,7 @@ open class MetadataDependencyTransformationTask
         .fileProperty()
         .apply { set(outputsDir.resolve("${kotlinSourceSet.name}.visibleSourceSets")) }
 
+    @get:PathSensitive(PathSensitivity.RELATIVE)
     @get:InputFiles
     protected val parentVisibleSourceSetFiles: FileCollection = project.filesProvider {
         parentTransformationTasks.map { taskProvider ->
@@ -102,6 +105,7 @@ open class MetadataDependencyTransformationTask
         }
     }
 
+    @get:PathSensitive(PathSensitivity.RELATIVE)
     @get:InputFiles
     protected val parentTransformedLibraries: FileCollection = project.filesProvider {
         parentTransformationTasks.map { taskProvider ->
@@ -182,7 +186,7 @@ private typealias SerializableComponentIdentifierKey = String
  */
 private val ComponentIdentifier.serializableUniqueKey
     get(): SerializableComponentIdentifierKey = when (this) {
-        is ProjectComponentIdentifier -> "project ${build.name}$projectPath"
+        is ProjectComponentIdentifier -> "project ${build.buildPathCompat}$projectPath"
         is ModuleComponentIdentifier -> "module $group:$module:$version"
         else -> error("Unexpected Component Identifier: '$this' of type ${this.javaClass}")
     }

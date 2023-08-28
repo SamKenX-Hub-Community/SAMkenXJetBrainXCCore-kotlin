@@ -36,11 +36,12 @@ compileCompilerKotlin {
     kotlinOptions.jvmTarget = "1.8"
     kotlinOptions.freeCompilerArgs += [
             '-opt-in=kotlin.RequiresOptIn',
-            '-opt-in=org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI',
             "-opt-in=kotlinx.cinterop.BetaInteropApi",
             "-opt-in=kotlinx.cinterop.ExperimentalForeignApi",
             '-Xskip-prerelease-check']
 }
+
+TasksKt.optInToIrSymbolInternals(project)
 
 compileCli_bcKotlin {
     kotlinOptions.freeCompilerArgs += ['-Xskip-prerelease-check']
@@ -142,7 +143,7 @@ configurations {
 dependencies {
     kotlin_compiler_jar kotlinCompilerModule
     kotlin_stdlib_jar kotlinStdLibModule
-    use(DependenciesKt) {
+    use(RepoDependencies) {
         trove4j_jar commonDependency("org.jetbrains.intellij.deps:trove4j")
         kotlin_reflect_jar commonDependency("org.jetbrains.kotlin:kotlin-reflect")
         compilerApi(commonDependency("org.jetbrains.intellij.deps.fastutil:intellij-deps-fastutil")) { setTransitive(false) }
@@ -158,6 +159,7 @@ dependencies {
     compilerImplementation project(":kotlin-compiler")
     compilerApi project(":native:kotlin-native-utils")
     compilerApi project(":core:descriptors")
+    compilerApi project(":core:compiler.common.native")
     compilerApi project(":compiler:ir.tree")
     compilerApi project(":compiler:ir.backend.common")
     compilerApi project(":compiler:util")
@@ -169,6 +171,7 @@ dependencies {
     compilerApi project(":kotlin-util-klib-metadata")
     compilerApi project(":compiler:ir.serialization.common")
     compilerApi project(":compiler:fir:fir-serialization")
+    compilerApi project(":compiler:fir:native")
     compilerApi project(":compiler:ir.psi2ir")
     compilerApi project(":kotlin-native-shared")
     use(IntellijDependenciesKt) {
@@ -248,4 +251,9 @@ publishing {
             from components.java
         }
     }
+}
+
+RepoArtifacts.sourcesJar(project) {
+    it.from(sourceSets["cli_bc"].allSource)
+    it.from(sourceSets["compiler"].allSource)
 }

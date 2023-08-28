@@ -1,5 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import com.github.jengelman.gradle.plugins.shadow.transformers.DontIncludeResourceTransformer
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.pill.PillExtension
 
 plugins {
@@ -28,13 +30,16 @@ kotlin {
                 "org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi",
                 "org.jetbrains.kotlin.gradle.ExternalKotlinTargetApi",
                 "org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi",
+                "org.jetbrains.kotlin.gradle.DeprecatedTargetPresetApi",
             )
         )
+        suppressWarnings = true
     }
 }
 
 apiValidation {
     publicMarkers.add("org.jetbrains.kotlin.gradle.ExternalKotlinTargetApi")
+    publicMarkers.add("org.jetbrains.kotlin.gradle.dsl.KotlinGradlePluginDsl")
     nonPublicMarkers.add("org.jetbrains.kotlin.gradle.InternalKotlinGradlePluginApi")
     additionalSourceSets.add("common")
 }
@@ -87,7 +92,7 @@ dependencies {
     }
     commonCompileOnly(intellijCore())
     commonCompileOnly(commonDependency("org.jetbrains.teamcity:serviceMessages"))
-    commonCompileOnly("com.gradle:gradle-enterprise-gradle-plugin:3.12.4")
+    commonCompileOnly(libs.gradle.enterprise.gradlePlugin)
     commonCompileOnly(commonDependency("com.google.code.gson:gson"))
     commonCompileOnly("de.undercouch:gradle-download-task:4.1.1")
     commonCompileOnly("com.github.gundy:semver4j:0.16.4:nodeps") {
@@ -116,7 +121,7 @@ dependencies {
     embedded(project(":kotlin-gradle-statistics"))
     embedded(commonDependency("org.jetbrains.intellij.deps:asm-all")) { isTransitive = false }
     embedded(commonDependency("com.google.code.gson:gson")) { isTransitive = false }
-    embedded(commonDependency("com.google.guava:guava")) { isTransitive = false }
+    embedded(libs.guava) { isTransitive = false }
     embedded(commonDependency("org.jetbrains.teamcity:serviceMessages")) { isTransitive = false }
     embedded(project(":kotlin-tooling-metadata")) { isTransitive = false }
     embedded("de.undercouch:gradle-download-task:4.1.1")
@@ -167,11 +172,6 @@ tasks {
         }
     }
 
-    withType<ValidatePlugins>().configureEach {
-        failOnWarning.set(true)
-        enableStricterValidation.set(true)
-    }
-
     withType<ShadowJar>().configureEach {
         relocate("com.github.gundy", "$kotlinEmbeddableRootPackage.com.github.gundy")
         relocate("de.undercouch.gradle.tasks.download", "$kotlinEmbeddableRootPackage.de.undercouch.gradle.tasks.download")
@@ -184,9 +184,12 @@ tasks {
     }
 }
 
-projectTest {
-    dependsOn(tasks.named("validatePlugins"))
+tasks.named("validatePlugins") {
+    // We're manually registering and wiring validation tasks for each plugin variant
+    enabled = false
+}
 
+projectTest {
     workingDir = rootDir
 }
 
@@ -246,12 +249,6 @@ gradlePlugin {
             displayName = description
             implementationClass = "org.jetbrains.kotlin.gradle.plugin.cocoapods.KotlinCocoapodsPlugin"
         }
-        create("kotlinMultiplatformPluginPm20") {
-            id = "org.jetbrains.kotlin.multiplatform.pm20"
-            description = "Kotlin Multiplatform plugin with PM2.0"
-            displayName = description
-            implementationClass = "org.jetbrains.kotlin.gradle.plugin.KotlinPm20PluginWrapper"
-        }
     }
 }
 
@@ -274,6 +271,15 @@ if (!kotlinBuildProperties.isInJpsBuildIdeaSync) {
     }
 
     val functionalTestCompilation = kotlin.target.compilations.getByName("functionalTest")
+    functionalTestCompilation.compileJavaTaskProvider.configure {
+        sourceCompatibility = JavaLanguageVersion.of(11).toString()
+        targetCompatibility = JavaLanguageVersion.of(11).toString()
+    }
+    functionalTestCompilation.compileTaskProvider.configure {
+        with(this as KotlinCompile) {
+            kotlinJavaToolchain.toolchain.use(project.getToolchainLauncherFor(JdkMajorVersion.JDK_11_0))
+        }
+    }
     functionalTestCompilation.associateWith(kotlin.target.compilations.getByName("main"))
     functionalTestCompilation.associateWith(kotlin.target.compilations.getByName("common"))
 
@@ -316,8 +322,8 @@ if (!kotlinBuildProperties.isInJpsBuildIdeaSync) {
         val implementation = project.configurations.getByName(functionalTestSourceSet.implementationConfigurationName)
         val compileOnly = project.configurations.getByName(functionalTestSourceSet.compileOnlyConfigurationName)
 
-        implementation("com.android.tools.build:gradle:7.2.1")
-        implementation("com.android.tools.build:gradle-api:7.2.1")
+        implementation("com.android.tools.build:gradle:7.4.2")
+        implementation("com.android.tools.build:gradle-api:7.4.2")
         compileOnly("com.android.tools:common:30.2.1")
         implementation(gradleKotlinDsl())
         implementation(project(":kotlin-gradle-plugin-kpm-android"))
@@ -325,7 +331,7 @@ if (!kotlinBuildProperties.isInJpsBuildIdeaSync) {
         implementation(project(":kotlin-tooling-metadata"))
         implementation(project.dependencies.testFixtures(project(":kotlin-gradle-plugin-idea")))
         implementation("com.github.gundy:semver4j:0.16.4:nodeps") {
-            (this as ExternalModuleDependency).exclude(group = "*")
+            exclude(group = "*")
         }
         implementation("org.reflections:reflections:0.10.2")
     }

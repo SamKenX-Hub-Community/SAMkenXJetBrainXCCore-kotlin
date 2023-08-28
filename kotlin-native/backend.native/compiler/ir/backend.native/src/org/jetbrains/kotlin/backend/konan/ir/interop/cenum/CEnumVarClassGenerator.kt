@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.backend.konan.ir.interop.irInstanceInitializer
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.ir.IrBuiltIns
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.builders.irBlockBody
 import org.jetbrains.kotlin.ir.builders.irGet
 import org.jetbrains.kotlin.ir.builders.irInt
@@ -29,6 +30,7 @@ import org.jetbrains.kotlin.psi2ir.generators.GeneratorContext
 
 private val typeSizeAnnotation = FqName("kotlinx.cinterop.internal.CEnumVarTypeSize")
 
+@OptIn(ObsoleteDescriptorBasedAPI::class)
 internal class CEnumVarClassGenerator(
         context: GeneratorContext,
         private val symbols: KonanSymbols
@@ -57,11 +59,11 @@ internal class CEnumVarClassGenerator(
 
     private fun createPrimaryConstructor(enumVarClass: IrClass): IrConstructor {
         val irConstructor = createConstructor(enumVarClass.descriptor.unsubstitutedPrimaryConstructor!!)
-        val classSymbol = symbolTable.referenceClass(enumVarClass.descriptor)
+        val classSymbol = symbolTable.descriptorExtension.referenceClass(enumVarClass.descriptor)
         postLinkageSteps.add {
             irConstructor.body = irBuilder(irBuiltIns, irConstructor.symbol, SYNTHETIC_OFFSET, SYNTHETIC_OFFSET).irBlockBody {
                 +IrDelegatingConstructorCallImpl.fromSymbolOwner(
-                        startOffset, endOffset, context.irBuiltIns.unitType, symbols.enumVarConstructorSymbol
+                    startOffset, endOffset, context.irBuiltIns.unitType, symbols.enumVarConstructorSymbol
                 ).also {
                     it.putValueArgument(0, irGet(irConstructor.valueParameters[0]))
                 }
@@ -80,13 +82,13 @@ internal class CEnumVarClassGenerator(
             }
 
     private fun createCompanionConstructor(companionObjectDescriptor: ClassDescriptor, typeSize: Int): IrConstructor {
-        val classSymbol = symbolTable.referenceClass(companionObjectDescriptor)
+        val classSymbol = symbolTable.descriptorExtension.referenceClass(companionObjectDescriptor)
         return createConstructor(companionObjectDescriptor.unsubstitutedPrimaryConstructor!!).also {
             postLinkageSteps.add {
                 it.body = irBuilder(irBuiltIns, it.symbol, SYNTHETIC_OFFSET, SYNTHETIC_OFFSET).irBlockBody {
                     +IrDelegatingConstructorCallImpl.fromSymbolOwner(
-                            startOffset, endOffset, context.irBuiltIns.unitType,
-                            symbols.primitiveVarPrimaryConstructor
+                        startOffset, endOffset, context.irBuiltIns.unitType,
+                        symbols.primitiveVarPrimaryConstructor
                     ).also {
                         it.putValueArgument(0, irInt(typeSize))
                     }

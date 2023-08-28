@@ -1,11 +1,12 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2023 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.analysis.low.level.api.fir.providers
 
 import com.intellij.psi.search.GlobalSearchScope
+import org.jetbrains.kotlin.analysis.low.level.api.fir.caches.getNotNullValueForNotNullContext
 import org.jetbrains.kotlin.analysis.low.level.api.fir.file.builder.LLFirFileBuilder
 import org.jetbrains.kotlin.analysis.low.level.api.fir.project.structure.CompositeKotlinPackageProvider
 import org.jetbrains.kotlin.analysis.low.level.api.fir.resolve.extensions.LLFirResolveExtensionTool
@@ -34,6 +35,8 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtClassLikeDeclaration
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.utils.exceptions.errorWithAttachment
+import org.jetbrains.kotlin.utils.exceptions.withVirtualFileEntry
 
 internal class LLFirProviderHelper(
     firSession: LLFirSession,
@@ -72,16 +75,21 @@ internal class LLFirProviderHelper(
 
     private val classifierByClassId =
         firSession.firCachesFactory.createCache<ClassId, FirClassLikeDeclaration?, KtClassLikeDeclaration?> { classId, context ->
+            require(context == null || context.isPhysical)
             val ktClass = context ?: declarationProvider.getClassLikeDeclarationByClassId(classId) ?: return@createCache null
 
             if (ktClass.getClassId() == null) return@createCache null
             val firFile = firFileBuilder.buildRawFirFileWithCaching(ktClass.containingKtFile)
             FirElementFinder.findClassifierWithClassId(firFile, classId)
-                ?: error("Classifier $classId was found in file ${ktClass.containingKtFile.virtualFilePath} but was not found in FirFile")
+                ?: errorWithAttachment("Classifier was found in KtFile but was not found in FirFile") {
+                    withEntry("classifierClassId", classId) { it.asString() }
+                    withVirtualFileEntry("virtualFile", ktClass.containingKtFile.virtualFile)
+                }
         }
 
     private val callablesByCallableId =
         firSession.firCachesFactory.createCache<CallableId, List<FirCallableSymbol<*>>, Collection<KtFile>?> { callableId, context ->
+            require(context == null || context.all { it.isPhysical })
             val files = context ?: declarationProvider.getTopLevelCallableFiles(callableId).ifEmpty { return@createCache emptyList() }
             buildList {
                 files.forEach { ktFile ->
@@ -108,7 +116,7 @@ internal class LLFirProviderHelper(
     ): FirClassLikeDeclaration? {
         if (classId.isLocal) return null
         if (!allowKotlinPackage && classId.isKotlinPackage()) return null
-        return classifierByClassId.getValue(classId, classLikeDeclaration)
+        return classifierByClassId.getNotNullValueForNotNullContext(classId, classLikeDeclaration)
     }
 
     fun getTopLevelClassNamesInPackage(packageFqName: FqName): Set<Name> {

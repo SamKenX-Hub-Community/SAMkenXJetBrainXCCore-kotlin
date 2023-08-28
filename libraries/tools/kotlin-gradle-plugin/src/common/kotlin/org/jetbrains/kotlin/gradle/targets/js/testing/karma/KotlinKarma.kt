@@ -36,10 +36,12 @@ import org.jetbrains.kotlin.gradle.targets.js.testing.*
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 import org.jetbrains.kotlin.gradle.tasks.KotlinTest
 import org.jetbrains.kotlin.gradle.utils.appendLine
+import org.jetbrains.kotlin.gradle.utils.getValue
 import org.jetbrains.kotlin.gradle.utils.property
 import org.jetbrains.kotlin.util.capitalizeDecapitalize.toLowerCaseAsciiOnly
 import org.slf4j.Logger
 import java.io.File
+import java.nio.file.Path
 
 class KotlinKarma(
     @Transient override val compilation: KotlinJsCompilation,
@@ -70,8 +72,13 @@ class KotlinKarma(
     }
     private val isTeamCity = project.providers.gradleProperty(TCServiceMessagesTestExecutor.TC_PROJECT_PROPERTY)
 
+    private val npmProjectDir by project.provider { npmProject.dir }
+
     override val requiredNpmDependencies: Set<RequiredKotlinJsDependency>
         get() = requiredDependencies + webpackConfig.getRequiredDependencies(versions)
+
+    override val workingDir: Path
+        get() = npmProjectDir.toPath()
 
     override fun getPath() = "$basePath:kotlinKarma"
 
@@ -81,7 +88,7 @@ class KotlinKarma(
     val webpackConfig = KotlinWebpackConfig(
         configDirectory = project.projectDir.resolve("webpack.config.d"),
         optimization = KotlinWebpackConfig.Optimization(
-            runtimeChunk = false,
+            runtimeChunk = null,
             splitChunks = false
         ),
         sourceMaps = true,
@@ -603,16 +610,18 @@ internal fun createLoadWasm(npmProjectDir: File, file: File): File {
     val static = npmProjectDir.resolve("static").also {
         it.mkdirs()
     }
-    val loadJs = static.resolve("load.js")
+    val loadJs = static.resolve("load.mjs")
     loadJs.printWriter().use { writer ->
         val relativePath = file.relativeTo(static).invariantSeparatorsPath
         writer.println(
             """
-                import exports from "$relativePath";
-
-                exports.startUnitTests();
-
-                window.__karma__.loaded();
+                import( /* webpackMode: "eager" */ "$relativePath")
+                    .then((exports) => {
+                        exports.default.startUnitTests();
+                        window.__karma__.loaded();
+                    }, (reason) => {
+                        window.__karma__.error("Problem with loading", void 0, void 0, void 0, reason)
+                    })
             """.trimIndent()
         )
     }

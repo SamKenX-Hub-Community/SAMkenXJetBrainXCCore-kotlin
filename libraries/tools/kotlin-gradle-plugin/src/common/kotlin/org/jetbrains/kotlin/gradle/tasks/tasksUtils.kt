@@ -1,10 +1,8 @@
 package org.jetbrains.kotlin.gradle.tasks
 
-import org.jetbrains.kotlin.build.report.metrics.BuildMetricsReporter
-import org.jetbrains.kotlin.build.report.metrics.BuildTime
-import org.jetbrains.kotlin.build.report.metrics.measure
+import org.jetbrains.kotlin.build.report.metrics.*
 import org.jetbrains.kotlin.cli.common.ExitCode
-import org.jetbrains.kotlin.compilerRunner.KotlinLogger
+import org.jetbrains.kotlin.buildtools.api.KotlinLogger
 import org.jetbrains.kotlin.gradle.internal.tasks.TaskWithLocalState
 import org.jetbrains.kotlin.gradle.internal.tasks.allOutputFiles
 import org.jetbrains.kotlin.gradle.logging.GradleKotlinLogger
@@ -71,7 +69,7 @@ internal fun TaskWithLocalState.cleanOutputsAndLocalState(reason: String? = null
 internal fun cleanOutputsAndLocalState(
     outputFiles: Iterable<File>,
     log: KotlinLogger,
-    metrics: BuildMetricsReporter,
+    metrics: BuildMetricsReporter<GradleBuildTime, GradleBuildPerformanceMetric>,
     reason: String? = null
 ) {
     log.kotlinDebug {
@@ -79,7 +77,7 @@ internal fun cleanOutputsAndLocalState(
         "Cleaning output$suffix:"
     }
 
-    metrics.measure(BuildTime.CLEAR_OUTPUT) {
+    metrics.measure(GradleBuildTime.CLEAR_OUTPUT) {
         for (file in outputFiles) {
             when {
                 file.isDirectory -> {

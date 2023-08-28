@@ -43,6 +43,7 @@ class AnalysisApiEnvironmentManagerImpl(
         StandaloneProjectFactory.createProjectEnvironment(
             testRootDisposable,
             testServices.applicationDisposableProvider.getApplicationRootDisposable(),
+            unitTestMode = true
         )
     }
 
@@ -66,8 +67,6 @@ class AnalysisApiEnvironmentManagerImpl(
         StandaloneProjectFactory.registerServicesForProjectEnvironment(
             _projectEnvironment,
             KtStaticModuleProvider(builtinsModule, ktModuleProjectStructure),
-            ktModuleProjectStructure.allKtModules(),
-            ktModuleProjectStructure.allSourceFiles(),
             useSiteCompilerConfiguration.languageVersionSettings,
             useSiteCompilerConfiguration.get(JVMConfigurationKeys.JDK_HOME)?.toPath(),
         )

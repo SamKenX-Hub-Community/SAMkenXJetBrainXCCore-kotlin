@@ -1,4 +1,4 @@
-import org.jetbrains.kotlin.gradle.dsl.KotlinJvmCompile
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 plugins {
     kotlin("jvm")
@@ -37,5 +37,5 @@ tasks.named<KotlinJvmCompile>("compileTestFixturesKotlin") {
 }
 
 tasks.named<Jar>("jar") {
-    callGroovy("manifestAttributes", manifest, project)
+    manifestAttributes(manifest)
 }

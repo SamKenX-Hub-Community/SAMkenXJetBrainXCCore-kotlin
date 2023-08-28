@@ -247,6 +247,12 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
         }
 
         @Test
+        @TestMetadata("charNoBoxing.kt")
+        public void testCharNoBoxing() throws Exception {
+            runTest("js/js.translator/testData/box/char/charNoBoxing.kt");
+        }
+
+        @Test
         @TestMetadata("charRanges.kt")
         public void testCharRanges() throws Exception {
             runTest("js/js.translator/testData/box/char/charRanges.kt");
@@ -864,6 +870,12 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
         @Test
         public void testAllFilesPresentInCoroutines() throws Exception {
             KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("js/js.translator/testData/box/coroutines"), Pattern.compile("^([^_](.+))\\.kt$"), null, TargetBackend.JS_IR_ES6, true);
+        }
+
+        @Test
+        @TestMetadata("boxingUnboxingInsideTheSuspendFunction.kt")
+        public void testBoxingUnboxingInsideTheSuspendFunction() throws Exception {
+            runTest("js/js.translator/testData/box/coroutines/boxingUnboxingInsideTheSuspendFunction.kt");
         }
 
         @Test
@@ -1721,6 +1733,12 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
         }
 
         @Test
+        @TestMetadata("hashCode.kt")
+        public void testHashCode() throws Exception {
+            runTest("js/js.translator/testData/box/dynamic/hashCode.kt");
+        }
+
+        @Test
         @TestMetadata("identityEquals.kt")
         public void testIdentityEquals() throws Exception {
             runTest("js/js.translator/testData/box/dynamic/identityEquals.kt");
@@ -1760,6 +1778,12 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
         @TestMetadata("iterator.kt")
         public void testIterator() throws Exception {
             runTest("js/js.translator/testData/box/dynamic/iterator.kt");
+        }
+
+        @Test
+        @TestMetadata("lambdaParameterInlining.kt")
+        public void testLambdaParameterInlining() throws Exception {
+            runTest("js/js.translator/testData/box/dynamic/lambdaParameterInlining.kt");
         }
 
         @Test
@@ -2378,6 +2402,12 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
             }
 
             @Test
+            @TestMetadata("exportInterfaceWithoutClases.kt")
+            public void testExportInterfaceWithoutClases() throws Exception {
+                runTest("js/js.translator/testData/box/esModules/export/exportInterfaceWithoutClases.kt");
+            }
+
+            @Test
             @TestMetadata("exportNestedClass.kt")
             public void testExportNestedClass() throws Exception {
                 runTest("js/js.translator/testData/box/esModules/export/exportNestedClass.kt");
@@ -2519,6 +2549,12 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
             @TestMetadata("jsExportInClass.kt")
             public void testJsExportInClass() throws Exception {
                 runTest("js/js.translator/testData/box/esModules/jsExport/jsExportInClass.kt");
+            }
+
+            @Test
+            @TestMetadata("perFileExportedApi.kt")
+            public void testPerFileExportedApi() throws Exception {
+                runTest("js/js.translator/testData/box/esModules/jsExport/perFileExportedApi.kt");
             }
 
             @Test
@@ -2934,6 +2970,12 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
         @TestMetadata("exportInterface.kt")
         public void testExportInterface() throws Exception {
             runTest("js/js.translator/testData/box/export/exportInterface.kt");
+        }
+
+        @Test
+        @TestMetadata("exportInterfaceWithoutClases.kt")
+        public void testExportInterfaceWithoutClases() throws Exception {
+            runTest("js/js.translator/testData/box/export/exportInterfaceWithoutClases.kt");
         }
 
         @Test
@@ -3386,12 +3428,6 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
             }
 
             @Test
-            @TestMetadata("assignToDotQualifiedWithSideEffect.kt")
-            public void testAssignToDotQualifiedWithSideEffect() throws Exception {
-                runTest("js/js.translator/testData/box/expression/evaluationOrder/assignToDotQualifiedWithSideEffect.kt");
-            }
-
-            @Test
             @TestMetadata("booleanAndOr.kt")
             public void testBooleanAndOr() throws Exception {
                 runTest("js/js.translator/testData/box/expression/evaluationOrder/booleanAndOr.kt");
@@ -3545,12 +3581,6 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
             @TestMetadata("orOrWithSideEffect.kt")
             public void testOrOrWithSideEffect() throws Exception {
                 runTest("js/js.translator/testData/box/expression/evaluationOrder/orOrWithSideEffect.kt");
-            }
-
-            @Test
-            @TestMetadata("reassignmentLhsCaching.kt")
-            public void testReassignmentLhsCaching() throws Exception {
-                runTest("js/js.translator/testData/box/expression/evaluationOrder/reassignmentLhsCaching.kt");
             }
 
             @Test
@@ -5210,6 +5240,12 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
         @TestMetadata("definitionOrder.kt")
         public void testDefinitionOrder() throws Exception {
             runTest("js/js.translator/testData/box/inheritance/definitionOrder.kt");
+        }
+
+        @Test
+        @TestMetadata("delegatingToSecondaryCtor.kt")
+        public void testDelegatingToSecondaryCtor() throws Exception {
+            runTest("js/js.translator/testData/box/inheritance/delegatingToSecondaryCtor.kt");
         }
 
         @Test
@@ -7008,6 +7044,34 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
     }
 
     @Nested
+    @TestMetadata("js/js.translator/testData/box/jsAstOptimizations")
+    @TestDataPath("$PROJECT_ROOT")
+    public class JsAstOptimizations {
+        @Test
+        public void testAllFilesPresentInJsAstOptimizations() throws Exception {
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("js/js.translator/testData/box/jsAstOptimizations"), Pattern.compile("^([^_](.+))\\.kt$"), null, TargetBackend.JS_IR_ES6, true);
+        }
+
+        @Test
+        @TestMetadata("deadCodeElimination.kt")
+        public void testDeadCodeElimination() throws Exception {
+            runTest("js/js.translator/testData/box/jsAstOptimizations/deadCodeElimination.kt");
+        }
+
+        @Test
+        @TestMetadata("inlineEmptyFunction.kt")
+        public void testInlineEmptyFunction() throws Exception {
+            runTest("js/js.translator/testData/box/jsAstOptimizations/inlineEmptyFunction.kt");
+        }
+
+        @Test
+        @TestMetadata("tempVarDeclOnAssignment.kt")
+        public void testTempVarDeclOnAssignment() throws Exception {
+            runTest("js/js.translator/testData/box/jsAstOptimizations/tempVarDeclOnAssignment.kt");
+        }
+    }
+
+    @Nested
     @TestMetadata("js/js.translator/testData/box/jsCode")
     @TestDataPath("$PROJECT_ROOT")
     public class JsCode {
@@ -8344,6 +8408,18 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
         @TestMetadata("overloadExtension.kt")
         public void testOverloadExtension() throws Exception {
             runTest("js/js.translator/testData/box/nameClashes/overloadExtension.kt");
+        }
+
+        @Test
+        @TestMetadata("overloadMethodsWithSameParameterPrivateTypeName.kt")
+        public void testOverloadMethodsWithSameParameterPrivateTypeName() throws Exception {
+            runTest("js/js.translator/testData/box/nameClashes/overloadMethodsWithSameParameterPrivateTypeName.kt");
+        }
+
+        @Test
+        @TestMetadata("overloadMethodsWithSameParameterTypeName.kt")
+        public void testOverloadMethodsWithSameParameterTypeName() throws Exception {
+            runTest("js/js.translator/testData/box/nameClashes/overloadMethodsWithSameParameterTypeName.kt");
         }
 
         @Test
@@ -9988,6 +10064,18 @@ public class IrBoxJsES6TestGenerated extends AbstractIrBoxJsES6Test {
         @TestMetadata("classJsName.kt")
         public void testClassJsName() throws Exception {
             runTest("js/js.translator/testData/box/reflection/classJsName.kt");
+        }
+
+        @Test
+        @TestMetadata("createInstance.kt")
+        public void testCreateInstance() throws Exception {
+            runTest("js/js.translator/testData/box/reflection/createInstance.kt");
+        }
+
+        @Test
+        @TestMetadata("createInstanceByInstance.kt")
+        public void testCreateInstanceByInstance() throws Exception {
+            runTest("js/js.translator/testData/box/reflection/createInstanceByInstance.kt");
         }
 
         @Test

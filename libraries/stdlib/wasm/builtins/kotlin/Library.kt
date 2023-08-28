@@ -7,7 +7,6 @@
 
 package kotlin
 
-import kotlin.internal.PureReifiable
 import kotlin.wasm.internal.enumValueOfIntrinsic
 import kotlin.wasm.internal.enumValuesIntrinsic
 
@@ -27,10 +26,11 @@ public operator fun String?.plus(other: Any?): String = (this ?: "null") + other
 
 /**
  * Returns an array of objects of the given type with the given [size], initialized with null values.
+ *
+ * @throws RuntimeException if the specified [size] is negative.
  */
-// TODO: Should T be reified?
-@Suppress("REIFIED_TYPE_PARAMETER_NO_INLINE")
-public fun <@PureReifiable reified T> arrayOfNulls(size: Int): Array<T?> = Array(size)
+@Suppress("UNCHECKED_CAST")
+public inline fun <T> arrayOfNulls(size: Int): Array<T?> = Array<Any?>(size) as Array<T?>
 
 /**
  * Returns an array containing the specified elements.

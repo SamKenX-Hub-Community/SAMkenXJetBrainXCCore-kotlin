@@ -36,7 +36,7 @@ import kotlin.io.path.deleteExisting
 import kotlin.io.path.outputStream
 import kotlin.test.assertEquals
 
-abstract class Kapt3BaseIT : KGPBaseTest() {
+abstract class Kapt3BaseIT(val languageVersion: String = "1.9") : KGPBaseTest() {
     companion object {
         private const val KAPT_SUCCESSFUL_MESSAGE = "Annotation processing complete, errors: 0"
     }
@@ -44,6 +44,7 @@ abstract class Kapt3BaseIT : KGPBaseTest() {
     override val defaultBuildOptions: BuildOptions = super.defaultBuildOptions
         .copy(
             kaptOptions = this.kaptOptions(),
+            languageVersion = languageVersion,
         )
 
     protected open fun kaptOptions(): BuildOptions.KaptOptions = BuildOptions.KaptOptions(
@@ -160,15 +161,13 @@ open class Kapt3IT : Kapt3BaseIT() {
         project(
             "simple".withPrefix,
             gradleVersion,
-            buildJdk = jdk.location
         ) {
             //language=Groovy
             buildGradle.appendText(
                 """
                 |
-                |java {
-                |    sourceCompatibility = JavaVersion.VERSION_1_8
-                |    targetCompatibility = JavaVersion.VERSION_1_8
+                |kotlin {
+                |    jvmToolchain(${jdk.version.majorVersion})
                 |}
                 """.trimMargin()
             )
@@ -933,7 +932,7 @@ open class Kapt3IT : Kapt3BaseIT() {
     @GradleWithJdkTest
     fun testSimpleWithJdk11AndSourceLevel8(
         gradleVersion: GradleVersion,
-        jdk: JdkVersions.ProvidedJdk
+        jdk: JdkVersions.ProvidedJdk,
     ) {
         project(
             "simple".withPrefix,
@@ -942,6 +941,14 @@ open class Kapt3IT : Kapt3BaseIT() {
         ) {
             buildGradle.append(
                 "\nsourceCompatibility = '8'"
+            )
+
+            // because Java sourceCompatibility is fixed JVM target will different with JDK 11 on Gradle 8
+            // as the toolchain by default will use the Gradle JDK version
+            gradleProperties.appendText(
+                """
+                |kotlin.jvm.target.validation.mode=warning
+                """.trimMargin()
             )
 
             build("assemble") {
@@ -1266,6 +1273,16 @@ open class Kapt3IT : Kapt3BaseIT() {
                     ":kaptGenerateStubsKotlin",
                     "plugin:org.jetbrains.kotlin.noarg:annotation=my.custom.Annotation"
                 )
+            }
+        }
+    }
+
+    @DisplayName("KT-59256: kapt generated files are included into the test runtime classpath")
+    @GradleTest
+    fun testKaptGeneratedInTestRuntimeClasspath(gradleVersion: GradleVersion) {
+        project("kapt-in-test-runtime-classpath".withPrefix, gradleVersion) {
+            build("test") {
+                assertFileInProjectExists("build/tmp/kapt3/classes/main/META-INF/services/com.example.SomeInterface")
             }
         }
     }

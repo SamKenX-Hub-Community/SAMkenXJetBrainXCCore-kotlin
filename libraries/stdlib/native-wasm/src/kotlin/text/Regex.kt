@@ -10,7 +10,7 @@ import kotlin.text.regex.*
 private fun Iterable<RegexOption>.toInt(): Int = this.fold(0, { value, option -> value or option.value })
 
 private fun fromInt(value: Int): Set<RegexOption> =
-        RegexOption.values().filterTo(mutableSetOf<RegexOption>()) { value and it.mask == it.value  }
+        RegexOption.entries.filterTo(mutableSetOf<RegexOption>()) { value and it.mask == it.value  }
 
 /**
  * Provides enumeration values to use to set regular expression options.
@@ -79,7 +79,10 @@ public actual operator fun MatchGroupCollection.get(name: String): MatchGroup? {
 /**
  * Represents a compiled regular expression.
  * Provides functions to match strings in text with a pattern, replace the found occurrences and split text around matches.
+ *
+ * Note that in the future, the behavior of regular expression matching and replacement functions can be altered to match JVM implementation behavior where differences exist.
  */
+@Suppress("NO_ACTUAL_CLASS_MEMBER_FOR_EXPECTED_CLASS") // Counterpart for @Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
 public actual class Regex internal constructor(internal val nativePattern: Pattern) {
 
     internal enum class Mode {

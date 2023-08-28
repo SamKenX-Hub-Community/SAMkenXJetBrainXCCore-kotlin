@@ -623,6 +623,23 @@ class K2JSCompilerArguments : CommonCompilerArguments() {
             field = value
         }
 
+    @Argument(value = "-Xwasm-target", description = "Set up Wasm target (wasm-js or wasm-wasi)")
+    var wasmTarget: String? = null
+        set(value) {
+            checkFrozen()
+            field = if (value.isNullOrEmpty()) null else value
+        }
+
+    @Argument(
+        value = "-Xwasm-use-traps-instead-of-exceptions",
+        description = "Trap instead of throwing exceptions"
+    )
+    var wasmUseTrapsInsteadOfExceptions = false
+        set(value) {
+            checkFrozen()
+            field = value
+        }
+
     @Argument(
         value = "-Xforce-deprecated-legacy-compiler-usage",
         description = "The flag is used only for our inner infrastructure. It will be removed soon, so it's unsafe to use it nowadays."
@@ -656,6 +673,13 @@ class K2JSCompilerArguments : CommonCompilerArguments() {
         collector.deprecationWarn(enableJsScripting, false, "-Xenable-js-scripting")
         collector.deprecationWarn(irBaseClassInMetadata, false, "-Xir-base-class-in-metadata")
         collector.deprecationWarn(irNewIr2Js, true, "-Xir-new-ir2js")
+
+        if (irPerFile && moduleKind != MODULE_ES) {
+            collector.report(
+                CompilerMessageSeverity.ERROR,
+                "Per-file compilation can't be used with any `moduleKind` except `es` (ECMAScript Modules)"
+            )
+        }
 
         return super.configureAnalysisFlags(collector, languageVersion).also {
             it[allowFullyQualifiedNameInKClass] = wasm && wasmKClassFqn //Only enabled WASM BE supports this flag

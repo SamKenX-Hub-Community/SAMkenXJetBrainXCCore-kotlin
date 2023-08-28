@@ -9,7 +9,7 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.declarations.impl.FirDeclarationStatusImpl
-import org.jetbrains.kotlin.fir.declarations.impl.FirOuterClassTypeParameterRef
+import org.jetbrains.kotlin.fir.declarations.FirOuterClassTypeParameterRef
 import org.jetbrains.kotlin.fir.declarations.impl.FirResolvedDeclarationStatusImpl
 import org.jetbrains.kotlin.fir.declarations.utils.effectiveVisibility
 import org.jetbrains.kotlin.fir.declarations.utils.isExpect
@@ -18,17 +18,16 @@ import org.jetbrains.kotlin.fir.declarations.utils.visibility
 import org.jetbrains.kotlin.fir.extensions.FirStatusTransformerExtension
 import org.jetbrains.kotlin.fir.extensions.extensionService
 import org.jetbrains.kotlin.fir.extensions.statusTransformerExtensions
-import org.jetbrains.kotlin.fir.render
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.toSymbol
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction
 import org.jetbrains.kotlin.fir.scopes.unsubstitutedScope
 import org.jetbrains.kotlin.fir.toEffectiveVisibility
 import org.jetbrains.kotlin.fir.types.*
+import org.jetbrains.kotlin.fir.utils.exceptions.withFirEntry
 import org.jetbrains.kotlin.fir.visibilityChecker
-import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.types.Variance
-import org.jetbrains.kotlin.utils.addToStdlib.runIf
+import org.jetbrains.kotlin.utils.exceptions.errorWithAttachment
 
 class FirStatusResolver(
     val session: FirSession,
@@ -79,7 +78,9 @@ class FirStatusResolver(
             is FirConstructor -> resolveStatus(declaration, containingClass, isLocal)
             is FirField -> resolveStatus(declaration, containingClass, isLocal)
             is FirBackingField -> resolveStatus(declaration, containingClass, isLocal)
-            else -> error("Unsupported declaration type: ${declaration.render()}")
+            else -> errorWithAttachment("Unsupported declaration type: ${declaration::class.java}") {
+                withFirEntry("declaration", declaration)
+            }
         }
     }
 
@@ -290,28 +291,23 @@ class FirStatusResolver(
         )
         val effectiveVisibility = parentEffectiveVisibility.lowerBound(selfEffectiveVisibility, session.typeContext)
         val annotations = (containingProperty ?: declaration).annotations
-
-        val hasPublishedApiAnnotation = annotations.any {
-            it.typeRef.coneTypeSafe<ConeClassLikeType>()?.lookupTag?.classId == StandardClassIds.Annotations.PublishedApi
-        }
-
-        var selfPublishedEffectiveVisibility = runIf(hasPublishedApiAnnotation) {
-            visibility.toEffectiveVisibility(
-                containingClass?.symbol?.toLookupTag(), forClass = declaration is FirClass, ownerIsPublishedApi = true
-            )
-        }
-        var parentPublishedEffectiveVisibility = when {
+        val parentPublishedEffectiveVisibility = when {
             containingProperty != null -> containingProperty.publishedApiEffectiveVisibility
             containingClass is FirRegularClass -> containingClass.publishedApiEffectiveVisibility
             else -> null
         }
-        if (selfPublishedEffectiveVisibility != null || parentPublishedEffectiveVisibility != null) {
-            selfPublishedEffectiveVisibility = selfPublishedEffectiveVisibility ?: selfEffectiveVisibility
-            parentPublishedEffectiveVisibility = parentPublishedEffectiveVisibility ?: parentEffectiveVisibility
-            declaration.publishedApiEffectiveVisibility = parentPublishedEffectiveVisibility.lowerBound(
-                selfPublishedEffectiveVisibility,
-                session.typeContext
-            )
+
+        computePublishedApiEffectiveVisibility(
+            annotations,
+            visibility,
+            selfEffectiveVisibility,
+            containingClass?.symbol,
+            parentEffectiveVisibility,
+            parentPublishedEffectiveVisibility,
+            declaration is FirClass,
+            session
+        )?.let {
+            declaration.nonLazyPublishedApiEffectiveVisibility = it
         }
 
         if (containingClass is FirRegularClass && containingClass.isExpect) {

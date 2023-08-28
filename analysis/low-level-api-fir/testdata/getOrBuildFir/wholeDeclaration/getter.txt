@@ -6,3 +6,10 @@ FIR element rendered:
 public [ResolvedTo(BODY_RESOLVE)] get(): R|kotlin/String| {
     ^ String()
 }
+
+FIR FILE:
+FILE: [ResolvedTo(IMPORTS)] getter.kt
+    public final [ResolvedTo(BODY_RESOLVE)] val x: R|kotlin/String|
+        public [ResolvedTo(BODY_RESOLVE)] get(): R|kotlin/String| {
+            ^ String()
+        }

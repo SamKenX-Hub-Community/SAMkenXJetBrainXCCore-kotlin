@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.ir.backend.js.utils
 
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities.INTERNAL
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
 import org.jetbrains.kotlin.ir.backend.js.JsLoweredDeclarationOrigin
@@ -12,6 +13,7 @@ import org.jetbrains.kotlin.ir.backend.js.lower.serialization.ir.JsManglerIr
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrReturnableBlockSymbol
+import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.isUnit
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
@@ -115,37 +117,58 @@ fun Int.toJsIdentifier(): String {
     }
 }
 
+private fun List<IrType>.joinTypes(context: JsIrBackendContext): String {
+    if (isEmpty()) {
+        return ""
+    }
+    return joinToString("$", "$") { superType -> superType.asString(context) }
+}
+
+private fun IrFunction.findOriginallyContainingModule(): IrModuleFragment? {
+    if (JsLoweredDeclarationOrigin.isBridgeDeclarationOrigin(origin)) {
+        val thisSimpleFunction = this as? IrSimpleFunction ?: error("Bridge must be IrSimpleFunction")
+        val bridgeFrom = thisSimpleFunction.overriddenSymbols.firstOrNull() ?: error("Couldn't find the overridden function for the bridge")
+        return bridgeFrom.owner.findOriginallyContainingModule()
+    }
+    return (getPackageFragment() as? IrFile)?.module
+}
+
 fun calculateJsFunctionSignature(declaration: IrFunction, context: JsIrBackendContext): String {
     val declarationName = declaration.nameIfPropertyAccessor() ?: declaration.getJsNameOrKotlinName().asString()
 
     val nameBuilder = StringBuilder()
     nameBuilder.append(declarationName)
 
+    if (declaration.visibility === INTERNAL && declaration.parentClassOrNull != null) {
+        val containingModule = declaration.findOriginallyContainingModule()
+        if (containingModule != null) {
+            nameBuilder.append("_\$m_").append(containingModule.name.toString())
+        }
+    }
+
     // TODO should we skip type parameters and use upper bound of type parameter when print type of value parameters?
     declaration.typeParameters.ifNotEmpty {
         nameBuilder.append("_\$t")
         forEach { typeParam ->
-            nameBuilder.append("_").append(typeParam.name.asString())
-            typeParam.superTypes.ifNotEmpty {
-                nameBuilder.append("$")
-                joinTo(nameBuilder, "") { type -> type.asString() }
-            }
+            nameBuilder.append("_").append(typeParam.name.asString()).append(typeParam.superTypes.joinTypes(context))
         }
     }
     declaration.extensionReceiverParameter?.let {
-        nameBuilder.append("_r$${it.type.asString()}")
+        val superTypes = it.type.superTypes().joinTypes(context)
+        nameBuilder.append("_r$${it.type.asString(context)}$superTypes")
     }
     declaration.valueParameters.ifNotEmpty {
         joinTo(nameBuilder, "") {
             val defaultValueSign = if (it.origin == JsLoweredDeclarationOrigin.JS_SHADOWED_DEFAULT_PARAMETER) "?" else ""
-            "_${it.type.asString()}$defaultValueSign"
+            val superTypes = it.type.superTypes().joinTypes(context)
+            "_${it.type.asString(context)}$superTypes$defaultValueSign"
         }
     }
     declaration.returnType.let {
         // Return type is only used in signature for inline class and Unit types because
         // they are binary incompatible with supertypes.
         if (context.inlineClassesUtils.isTypeInlined(it) || it.isUnit()) {
-            nameBuilder.append("_ret$${it.asString()}")
+            nameBuilder.append("_ret$${it.asString(context)}")
         }
     }
 

@@ -32,6 +32,7 @@ dependencies {
     compileOnly(toolsJarApi())
     compileOnly(intellijCore())
     compileOnly(commonDependency("org.jetbrains.intellij.deps:trove4j"))
+    compileOnly(commonDependency("org.jetbrains.kotlin:kotlin-reflect")) { isTransitive = false }
 
     testApi(project(":compiler:backend"))
     testApi(project(":compiler:cli"))
@@ -49,12 +50,6 @@ sourceSets {
 
 allprojects {
     optInToExperimentalCompilerApi()
-}
-
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile> {
-    compilerOptions {
-        progressiveMode.set(true)
-    }
 }
 
 testsJar {}

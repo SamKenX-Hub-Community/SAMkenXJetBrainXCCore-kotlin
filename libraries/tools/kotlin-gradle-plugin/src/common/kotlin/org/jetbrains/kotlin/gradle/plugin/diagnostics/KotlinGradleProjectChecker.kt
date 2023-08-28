@@ -7,7 +7,10 @@ package org.jetbrains.kotlin.gradle.plugin.diagnostics
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.jetbrains.kotlin.gradle.dsl.AndroidMainSourceSetConventionsChecker
+import org.jetbrains.kotlin.gradle.dsl.IosSourceSetConventionChecker
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import org.jetbrains.kotlin.gradle.dsl.PlatformSourceSetConventionsChecker
 import org.jetbrains.kotlin.gradle.plugin.KotlinPluginLifecycle
 import org.jetbrains.kotlin.gradle.plugin.PropertiesProvider
 import org.jetbrains.kotlin.gradle.plugin.diagnostics.checkers.*
@@ -94,11 +97,24 @@ internal interface KotlinGradleProjectChecker {
 
     companion object {
         val ALL_CHECKERS: List<KotlinGradleProjectChecker> = listOf(
-            CommonMainWithDependsOnChecker,
+            CommonMainOrTestWithDependsOnChecker,
             DeprecatedKotlinNativeTargetsChecker,
             MissingNativeStdlibChecker,
             UnusedSourceSetsChecker,
             AndroidSourceSetLayoutV1SourceSetsNotFoundChecker,
+            AndroidPluginWithoutAndroidTargetChecker,
+            NoKotlinTargetsDeclaredChecker,
+            DisabledCinteropCommonizationInHmppProjectChecker,
+            DisabledNativeTargetsChecker,
+            JsEnvironmentChecker,
+            PreHmppDependenciesUsageChecker,
+            ExperimentalK2UsageChecker,
+            KotlinSourceSetTreeDependsOnMismatchChecker,
+            PlatformSourceSetConventionsChecker,
+            AndroidMainSourceSetConventionsChecker,
+            IosSourceSetConventionChecker,
+            KotlinTargetAlreadyDeclaredChecker,
+            InternalGradlePropertiesUsageChecker,
         )
     }
 }

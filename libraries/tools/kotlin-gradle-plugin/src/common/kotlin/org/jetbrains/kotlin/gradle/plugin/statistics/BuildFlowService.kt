@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.gradle.plugin.statistics
 
 import org.gradle.api.Project
 import org.gradle.api.invocation.Gradle
+import org.gradle.api.logging.Logging
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.services.BuildService
@@ -16,9 +17,12 @@ import org.gradle.tooling.events.OperationCompletionListener
 import org.gradle.tooling.events.task.TaskFailureResult
 import org.gradle.tooling.events.task.TaskFinishEvent
 import org.gradle.util.GradleVersion
+import org.jetbrains.kotlin.gradle.logging.kotlinDebug
 import org.jetbrains.kotlin.gradle.plugin.BuildEventsListenerRegistryHolder
 import org.jetbrains.kotlin.gradle.plugin.StatisticsBuildFlowManager
 import org.jetbrains.kotlin.gradle.plugin.internal.isProjectIsolationEnabled
+import org.jetbrains.kotlin.gradle.report.BuildReportType
+import org.jetbrains.kotlin.gradle.report.reportingSettings
 import org.jetbrains.kotlin.gradle.utils.isConfigurationCacheAvailable
 import org.jetbrains.kotlin.statistics.metrics.BooleanMetrics
 import org.jetbrains.kotlin.statistics.metrics.IStatisticsValuesConsumer
@@ -28,6 +32,11 @@ import java.io.Serializable
 
 internal abstract class BuildFlowService : BuildService<BuildFlowService.Parameters>, AutoCloseable, OperationCompletionListener {
     private var buildFailed: Boolean = false
+    private val log = Logging.getLogger(this.javaClass)
+
+    init {
+        log.kotlinDebug("Initialize ${this.javaClass.simpleName}")
+    }
 
     interface Parameters : BuildServiceParameters {
         val configurationMetrics: Property<MetricContainer>
@@ -56,6 +65,7 @@ internal abstract class BuildFlowService : BuildService<BuildFlowService.Paramet
             }
 
             val fusStatisticsAvailable = fusStatisticsAvailable(project.gradle)
+            val buildScanReportEnabled = reportingSettings(project).buildReportOutputs.contains(BuildReportType.BUILD_SCAN)
 
             //Workaround for known issues for Gradle 8+: https://github.com/gradle/gradle/issues/24887:
             // when this OperationCompletionListener is called services can be already closed for Gradle 8,
@@ -80,7 +90,7 @@ internal abstract class BuildFlowService : BuildService<BuildFlowService.Paramet
                         else -> StatisticsBuildFlowManager.getInstance(project).subscribeForBuildResult()
                     }
                 }
-                if (GradleVersion.current().baseVersion >= GradleVersion.version("8.1")) {
+                if (buildScanReportEnabled && GradleVersion.current().baseVersion >= GradleVersion.version("8.1")) {
                     StatisticsBuildFlowManager.getInstance(project).subscribeForBuildScan(project)
                 }
             }
@@ -88,6 +98,7 @@ internal abstract class BuildFlowService : BuildService<BuildFlowService.Paramet
     }
 
     override fun onFinish(event: FinishEvent?) {
+        parameters.fusStatisticsAvailable.get() //force to calculate configuration metrics before build finish
         if ((event is TaskFinishEvent) && (event.result is TaskFailureResult)) {
             buildFailed = true
         }
@@ -100,6 +111,7 @@ internal abstract class BuildFlowService : BuildService<BuildFlowService.Paramet
         KotlinBuildStatsService.applyIfInitialised {
             it.close()
         }
+        log.kotlinDebug("Close ${this.javaClass.simpleName}")
     }
 
     internal fun recordBuildFinished(action: String?, buildFailed: Boolean) {

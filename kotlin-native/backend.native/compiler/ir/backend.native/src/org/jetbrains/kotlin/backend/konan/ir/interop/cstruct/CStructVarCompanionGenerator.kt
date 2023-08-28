@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.descriptors.SimpleFunctionDescriptor
 import org.jetbrains.kotlin.ir.IrBuiltIns
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.builders.irBlockBody
 import org.jetbrains.kotlin.ir.builders.irInt
 import org.jetbrains.kotlin.ir.builders.irLong
@@ -27,6 +28,7 @@ import org.jetbrains.kotlin.psi2ir.generators.GeneratorContext
 
 private val varTypeAnnotationFqName = FqName("kotlinx.cinterop.internal.CStruct.VarType")
 
+@OptIn(ObsoleteDescriptorBasedAPI::class)
 internal class CStructVarCompanionGenerator(
         context: GeneratorContext,
         private val symbols: KonanSymbols
@@ -71,7 +73,7 @@ internal class CStructVarCompanionGenerator(
                                 startOffset, endOffset, context.irBuiltIns.unitType,
                                 irBuiltIns.anyClass.owner.primaryConstructor!!.symbol
                         )
-                        +irInstanceInitializer(symbolTable.referenceClass(companionObjectDescriptor))
+                        +irInstanceInitializer(symbolTable.descriptorExtension.referenceClass(companionObjectDescriptor))
                     }
                 }
             }
@@ -86,7 +88,7 @@ internal class CStructVarCompanionGenerator(
                             it.putValueArgument(0, irLong(size))
                             it.putValueArgument(1, irInt(align))
                         }
-                        +irInstanceInitializer(symbolTable.referenceClass(companionObjectDescriptor))
+                        +irInstanceInitializer(symbolTable.descriptorExtension.referenceClass(companionObjectDescriptor))
                     }
                 }
             }

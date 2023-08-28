@@ -13,9 +13,11 @@ import org.gradle.api.attributes.AttributeContainer
 import org.gradle.api.file.FileCollection
 import org.gradle.api.logging.Logging
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import org.jetbrains.kotlin.gradle.dsl.kotlinExtensionOrNull
 import org.jetbrains.kotlin.gradle.dsl.multiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.plugin.mpp.MetadataDependencyResolution.ChooseVisibleSourceSets.MetadataProvider.ArtifactMetadataProvider
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.util.currentBuildId
 import org.jetbrains.kotlin.gradle.plugin.sources.internal
 import org.jetbrains.kotlin.gradle.utils.*
 import java.util.*
@@ -36,15 +38,15 @@ internal sealed class MetadataDependencyResolution(
     }
 
     class KeepOriginalDependency(
-        dependency: ResolvedComponentResult
+        dependency: ResolvedComponentResult,
     ) : MetadataDependencyResolution(dependency)
 
     sealed class Exclude(
-        dependency: ResolvedComponentResult
+        dependency: ResolvedComponentResult,
     ) : MetadataDependencyResolution(dependency) {
 
         class Unrequested(
-            dependency: ResolvedComponentResult
+            dependency: ResolvedComponentResult,
         ) : Exclude(dependency)
 
         /**
@@ -65,7 +67,7 @@ internal sealed class MetadataDependencyResolution(
         val allVisibleSourceSetNames: Set<String>,
         val visibleSourceSetNamesExcludingDependsOn: Set<String>,
         val visibleTransitiveDependencies: Set<ResolvedDependencyResult>,
-        internal val metadataProvider: MetadataProvider
+        internal val metadataProvider: MetadataProvider,
     ) : MetadataDependencyResolution(dependency) {
 
         internal sealed class MetadataProvider {
@@ -74,9 +76,7 @@ internal sealed class MetadataDependencyResolution(
 
             abstract class ProjectMetadataProvider : MetadataProvider() {
                 enum class MetadataConsumer { Ide, Cli }
-
                 abstract fun getSourceSetCompiledMetadata(sourceSetName: String): FileCollection?
-                abstract fun getSourceSetCInteropMetadata(sourceSetName: String, consumer: MetadataConsumer): FileCollection?
             }
         }
 
@@ -89,11 +89,12 @@ internal sealed class MetadataDependencyResolution(
 
 internal class GranularMetadataTransformation(
     val params: Params,
-    val parentSourceSetVisibilityProvider: ParentSourceSetVisibilityProvider
+    val parentSourceSetVisibilityProvider: ParentSourceSetVisibilityProvider,
 ) {
     private val logger = Logging.getLogger("GranularMetadataTransformation[${params.sourceSetName}]")
 
     class Params(
+        val build: CurrentBuildIdentifier,
         val sourceSetName: String,
         val resolvedMetadataConfiguration: LazyResolvedConfiguration,
         val sourceSetVisibilityProvider: SourceSetVisibilityProvider,
@@ -102,6 +103,7 @@ internal class GranularMetadataTransformation(
         val platformCompilationSourceSets: Set<String>,
     ) {
         constructor(project: Project, kotlinSourceSet: KotlinSourceSet) : this(
+            build = project.currentBuild,
             sourceSetName = kotlinSourceSet.name,
             resolvedMetadataConfiguration = LazyResolvedConfiguration(kotlinSourceSet.internal.resolvableMetadataConfiguration),
             sourceSetVisibilityProvider = SourceSetVisibilityProvider(project),
@@ -114,7 +116,7 @@ internal class GranularMetadataTransformation(
     class ProjectData(
         val path: String,
         val sourceSetMetadataOutputs: LenientFuture<Map<String, SourceSetMetadataOutputs>>,
-        val moduleId: LenientFuture<ModuleDependencyIdentifier>
+        val moduleId: LenientFuture<ModuleDependencyIdentifier>,
     ) {
         override fun toString(): String = "ProjectData[path='$path']"
     }
@@ -231,7 +233,7 @@ internal class GranularMetadataTransformation(
             error("Artifacts of dependency ${module.id.displayName} is built by old Kotlin Gradle Plugin and can't be consumed in this way")
         }
 
-        val isResolvedToProject = moduleId is ProjectComponentIdentifier && moduleId.build.isCurrentBuild
+        val isResolvedToProject = moduleId in params.build
 
         val sourceSetVisibility =
             params.sourceSetVisibilityProvider.getVisibleSourceSets(
@@ -299,7 +301,7 @@ internal class GranularMetadataTransformation(
         return when (val componentId = component.id) {
             is ModuleComponentIdentifier -> ModuleDependencyIdentifier(componentId.group, componentId.module)
             is ProjectComponentIdentifier -> {
-                if (componentId.build.isCurrentBuild) {
+                if (componentId in params.build) {
                     params.projectData[componentId.projectPath]?.moduleId?.getOrThrow()
                         ?: error("Cant find project Module ID by ${componentId.projectPath}")
                 } else {
@@ -325,13 +327,33 @@ private val Project.allProjectsData: Map<String, GranularMetadataTransformation.
 
 private fun Project.collectAllProjectsData(): Map<String, GranularMetadataTransformation.ProjectData> {
     return rootProject.allprojects.associateBy { it.path }.mapValues { (path, currentProject) ->
+
+        /*
+            We're calling into various different projects (Note: This implementation will change with Project Isolation)
+            Since not all projects might have the Kotlin Gradle Plugin applied we do call into 'idOfRootModule' in two different ways:
+
+            1) If KGP is applied, we use the lifecycle APIs to safely get a value after the DSL was finalised.
+            2) If KGP was *not* applied, we create a Future which
+                - creates a lazy once the project is evaluated
+                - only evaluates the lazy once the moduleId is actually accessed
+
+               This double deferral ensures that the value indeed is accessed as late as possible.
+               Unwrapping the lazy before the buildscript is evaluated will fail with 'future not completed'
+             */
+        val moduleId = if (currentProject.kotlinExtensionOrNull != null) currentProject.future {
+            KotlinPluginLifecycle.Stage.AfterFinaliseDsl.await()
+            ModuleIds.idOfRootModule(currentProject)
+        }.lenient else CompletableFuture<Lazy<ModuleDependencyIdentifier>>().apply {
+            currentProject.whenEvaluated {
+                complete(lazy { ModuleIds.idOfRootModule(currentProject) })
+            }
+        }.map { it.value }.lenient
+
+
         GranularMetadataTransformation.ProjectData(
             path = path,
             sourceSetMetadataOutputs = currentProject.future { currentProject.collectSourceSetMetadataOutputs() }.lenient,
-            moduleId = currentProject.future {
-                KotlinPluginLifecycle.Stage.AfterFinaliseDsl.await()
-                ModuleIds.idOfRootModule(currentProject)
-            }.lenient
+            moduleId = moduleId
         )
     }
 }
@@ -340,7 +362,8 @@ internal fun MetadataDependencyResolution.projectDependency(currentProject: Proj
     dependency.toProjectOrNull(currentProject)
 
 internal fun ResolvedComponentResult.toProjectOrNull(currentProject: Project): Project? {
-    val projectId = currentBuildProjectIdOrNull ?: return null
+    if (this !in currentProject.currentBuild) return null
+    val projectId = id as? ProjectComponentIdentifier ?: return null
     return currentProject.project(projectId.projectPath)
 }
 

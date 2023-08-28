@@ -56,7 +56,7 @@ private class InheritedDefaultMethodsOnClassesLowering(val context: JvmBackendCo
             }
         }
 
-        val implementation = declaration.findInterfaceImplementation(context.state.jvmDefaultMode)
+        val implementation = declaration.findInterfaceImplementation(context.config.jvmDefaultMode)
             ?: return declaration
         return generateDelegationToDefaultImpl(implementation, declaration)
     }
@@ -137,7 +137,7 @@ private class ReplaceDefaultImplsOverriddenSymbols(private val context: JvmBacke
     // if the overridden symbol has been, or will be, replaced and patch it accordingly.
     override fun visitSimpleFunction(declaration: IrSimpleFunction) {
         declaration.overriddenSymbols = declaration.overriddenSymbols.map { symbol ->
-            if (symbol.owner.findInterfaceImplementation(context.state.jvmDefaultMode) != null)
+            if (symbol.owner.findInterfaceImplementation(context.config.jvmDefaultMode) != null)
                 context.cachedDeclarations.getDefaultImplsRedirection(symbol.owner).symbol
             else symbol
         }
@@ -164,7 +164,7 @@ private class InterfaceSuperCallsLowering(val context: JvmBackendContext) : IrEl
         }
 
         val superCallee = expression.symbol.owner
-        if (superCallee.isDefinitelyNotDefaultImplsMethod(context.state.jvmDefaultMode)) return super.visitCall(expression)
+        if (superCallee.isDefinitelyNotDefaultImplsMethod(context.config.jvmDefaultMode)) return super.visitCall(expression)
 
         val redirectTarget = context.cachedDeclarations.getDefaultImplsFunction(superCallee)
         val newCall = createDelegatingCallWithPlaceholderTypeArguments(expression, redirectTarget, context.irBuiltIns)
@@ -214,7 +214,7 @@ private class InterfaceDefaultCallsLowering(val context: JvmBackendContext) : Ir
 
         if (!callee.hasInterfaceParent() ||
             callee.origin != IrDeclarationOrigin.FUNCTION_FOR_DEFAULT_PARAMETER ||
-            callee.isSimpleFunctionCompiledToJvmDefault(context.state.jvmDefaultMode)
+            callee.isSimpleFunctionCompiledToJvmDefault(context.config.jvmDefaultMode)
         ) {
             return super.visitCall(expression)
         }
@@ -254,20 +254,28 @@ internal val interfaceObjectCallsPhase = makeIrFilePhase(
     description = "Resolve calls to Object methods on interface types to virtual methods"
 )
 
-private class InterfaceObjectCallsLowering(val context: JvmBackendContext) : IrElementTransformerVoid(), FileLoweringPass {
-    override fun lower(irFile: IrFile) = irFile.transformChildrenVoid(this)
+private class InterfaceObjectCallsLowering(val context: JvmBackendContext) : IrElementVisitorVoid, FileLoweringPass {
+    override fun lower(irFile: IrFile) = irFile.acceptChildren(this, null)
 
-    override fun visitCall(expression: IrCall): IrExpression {
-        if (expression.superQualifierSymbol != null && !expression.isSuperToAny())
-            return super.visitCall(expression)
+    override fun visitElement(element: IrElement) {
+        element.acceptChildren(this, null)
+    }
+
+    override fun visitCall(expression: IrCall) {
+        expression.acceptChildren(this, null)
+
+        if (expression.superQualifierSymbol != null && !expression.isSuperToAny()) return
+
         val callee = expression.symbol.owner
-        if (!callee.hasInterfaceParent() && expression.dispatchReceiver?.run { type.erasedUpperBound.isJvmInterface } != true)
-            return super.visitCall(expression)
+        if (!callee.hasInterfaceParent() && expression.dispatchReceiver?.run { type.erasedUpperBound.isJvmInterface } != true) return
+
         val resolved = callee.resolveFakeOverride()
-        if (resolved?.isMethodOfAny() != true)
-            return super.visitCall(expression)
-        val newSuperQualifierSymbol = context.irBuiltIns.anyClass.takeIf { expression.superQualifierSymbol != null }
-        return super.visitCall(irCall(expression, resolved, newSuperQualifierSymbol = newSuperQualifierSymbol))
+        if (resolved?.isMethodOfAny() != true) return
+
+        expression.symbol = resolved.symbol
+        if (expression.superQualifierSymbol != null) {
+            expression.superQualifierSymbol = context.irBuiltIns.anyClass
+        }
     }
 }
 

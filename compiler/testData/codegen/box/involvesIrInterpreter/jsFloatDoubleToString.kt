@@ -1,5 +1,6 @@
 // TARGET_BACKEND: JS_IR
 // IGNORE_BACKEND_K1: JS_IR, JS_IR_ES6
+
 fun <T> T.id() = this
 
 const val toStringDouble1 = 1.0.<!EVALUATED("1")!>toString()<!>

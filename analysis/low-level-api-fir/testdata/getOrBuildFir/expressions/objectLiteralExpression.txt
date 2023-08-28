@@ -4,8 +4,19 @@ FIR source kind: KtRealSourceElementKind
 
 FIR element rendered:
 object : R|kotlin/Any| {
-    private [ResolvedTo(BODY_RESOLVE)] constructor(): R|<anonymous>| {
+    private [ResolvedTo(BODY_RESOLVE)] [ContainingClassKey=<anonymous>] constructor(): R|<anonymous>| {
         super<R|kotlin/Any|>()
     }
 
 }
+
+FIR FILE:
+FILE: [ResolvedTo(IMPORTS)] objectLiteralExpression.kt
+    public final [ResolvedTo(BODY_RESOLVE)] val x: R|kotlin/Any| = object : R|kotlin/Any| {
+        private [ResolvedTo(BODY_RESOLVE)] [ContainingClassKey=<anonymous>] constructor(): R|<anonymous>| {
+            super<R|kotlin/Any|>()
+        }
+
+    }
+
+        public [ResolvedTo(BODY_RESOLVE)] get(): R|kotlin/Any|

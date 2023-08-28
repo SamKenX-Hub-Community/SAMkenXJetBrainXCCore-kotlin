@@ -19,14 +19,17 @@ package org.jetbrains.kotlin.gradle
 import com.intellij.testFramework.TestDataPath
 import org.gradle.api.logging.LogLevel
 import org.gradle.util.GradleVersion
-import org.jetbrains.kotlin.gradle.internals.KOTLIN_12X_MPP_DEPRECATION_WARNING
 import org.jetbrains.kotlin.gradle.plugin.EXPECTED_BY_CONFIG_NAME
 import org.jetbrains.kotlin.gradle.plugin.IMPLEMENT_CONFIG_NAME
 import org.jetbrains.kotlin.gradle.plugin.IMPLEMENT_DEPRECATION_WARNING
+import org.jetbrains.kotlin.gradle.plugin.diagnostics.KotlinToolingDiagnostics
 import org.jetbrains.kotlin.gradle.testbase.TestVersions
+import org.jetbrains.kotlin.gradle.testbase.assertHasDiagnostic
+import org.jetbrains.kotlin.gradle.testbase.assertNoDiagnostic
 import org.jetbrains.kotlin.gradle.util.AGPVersion
 import org.jetbrains.kotlin.gradle.util.getFileByName
 import org.jetbrains.kotlin.gradle.util.modify
+import org.jetbrains.kotlin.gradle.util.replaceText
 import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.junit.Test
 import java.io.File
@@ -35,16 +38,35 @@ import kotlin.test.assertTrue
 
 @TestDataPath("\$CONTENT_ROOT/resources")
 class MultiplatformGradleIT : BaseGradleIT() {
+    override val defaultGradleVersion: GradleVersionRequired = GradleVersionRequired.FOR_MPP_SUPPORT
 
     @Test
     fun testMultiplatformCompile() {
         val project = Project("multiplatformProject")
 
+        project.setupWorkingDir()
+
+        // remove the default suppression that was added for all other tests
+        project.projectDir.resolve("gradle.properties").replaceText("kotlin.internal.mpp12x.deprecation.suppress=true", "")
+
+        project.build("build") {
+            assertFailed()
+
+            assertHasDiagnostic(KotlinToolingDiagnostics.Kotlin12XMppDeprecation)
+
+            assertTasksNotExecuted(
+                ":lib:compileKotlinCommon",
+                ":lib:compileTestKotlinCommon",
+                ":libJvm:compileKotlin",
+                ":libJvm:compileTestKotlin",
+            )
+        }
+
+        project.projectDir.resolve("gradle.properties").appendText("\nkotlin.internal.mpp12x.deprecation.suppress=true")
         project.build("build") {
             assertSuccessful()
 
-            assertContains(KOTLIN_12X_MPP_DEPRECATION_WARNING)
-
+            assertNoDiagnostic(KotlinToolingDiagnostics.Kotlin12XMppDeprecation)
             assertTasksExecuted(
                 ":lib:compileKotlinCommon",
                 ":lib:compileTestKotlinCommon",
@@ -55,13 +77,6 @@ class MultiplatformGradleIT : BaseGradleIT() {
             assertFileExists("lib/build/classes/kotlin/test/foo/PlatformTest.kotlin_metadata")
             assertFileExists("libJvm/build/classes/kotlin/main/foo/PlatformClass.class")
             assertFileExists("libJvm/build/classes/kotlin/test/foo/PlatformTest.class")
-        }
-
-        project.projectDir.resolve("gradle.properties").appendText("\nkotlin.internal.mpp12x.deprecation.suppress=true")
-        project.build {
-            assertSuccessful()
-
-            assertNotContains(KOTLIN_12X_MPP_DEPRECATION_WARNING)
         }
     }
 
@@ -287,7 +302,7 @@ class MultiplatformGradleIT : BaseGradleIT() {
             "actual fun foo(): String = \"jvm\"" to "libJvm/src/$sourceSetName/kotlin",
         ).forEach { (code, path) ->
             File(projectDir, path).run {
-                mkdirs();
+                mkdirs()
                 File(this, "Foo.kt").writeText(code)
             }
         }
@@ -348,7 +363,9 @@ class MultiplatformGradleIT : BaseGradleIT() {
     @Test
     fun testKtKt35942InternalsFromMainInTestViaTransitiveDepsAndroid() = with(
         Project(
-            projectName = "kt-35942-android"
+            projectName = "kt-35942-android",
+            // Should be checked with the latest AGP /Gradle once will be migrated to the new test DSL
+            gradleVersionRequirement = GradleVersionRequired.Until(TestVersions.Gradle.G_7_6)
         )
     ) {
         val currentGradleVersion = chooseWrapperVersionOrFinishTest()

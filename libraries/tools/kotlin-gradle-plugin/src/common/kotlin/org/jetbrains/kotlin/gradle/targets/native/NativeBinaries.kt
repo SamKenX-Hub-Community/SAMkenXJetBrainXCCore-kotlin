@@ -13,13 +13,12 @@ import org.gradle.api.Project
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.attributes.Attribute
 import org.gradle.api.attributes.HasAttributes
-import org.gradle.api.file.Directory
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.AbstractExecTask
 import org.gradle.api.tasks.TaskProvider
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink
-import org.jetbrains.kotlin.gradle.utils.Xcode
 import org.jetbrains.kotlin.gradle.utils.lowerCamelCaseName
 import org.jetbrains.kotlin.konan.target.KonanTarget
 import org.jetbrains.kotlin.util.capitalizeDecapitalize.toUpperCaseAsciiOnly
@@ -212,6 +211,7 @@ abstract class AbstractNativeLibrary(
     /**
      * If dependencies added by the [export] method are resolved transitively or not.
      */
+    @ExperimentalKotlinGradlePluginApi
     var transitiveExport: Boolean
         get() = project.configurations.maybeCreate(exportConfigurationName).isTransitive
         set(value) {
@@ -269,7 +269,6 @@ class Framework(
     compilation: KotlinNativeCompilation
 ) : AbstractNativeLibrary(name, baseName, buildType, compilation), HasAttributes {
 
-    @Transient // Is required configuration cache support for KotlinNative tasks that capture whole binary object as task state
     private val attributeContainer = HierarchyAttributeContainer(parent = compilation.attributes)
 
     override fun getAttributes() = attributeContainer
@@ -281,12 +280,7 @@ class Framework(
     /**
      * Embed bitcode for the framework or not. See [BitcodeEmbeddingMode].
      */
-    val embedBitcodeMode = project.objects.property(org.jetbrains.kotlin.gradle.plugin.mpp.BitcodeEmbeddingMode::class.java).apply {
-        convention(project.provider {
-            Xcode?.defaultBitcodeEmbeddingMode(konanTarget, buildType)
-                ?: org.jetbrains.kotlin.gradle.plugin.mpp.BitcodeEmbeddingMode.DISABLE
-        })
-    }
+    val embedBitcodeMode = project.objects.property(org.jetbrains.kotlin.gradle.plugin.mpp.BitcodeEmbeddingMode::class.java)
 
     @Deprecated("Use 'embedBitcodeMode' property instead.")
     var embedBitcode: org.jetbrains.kotlin.gradle.plugin.mpp.BitcodeEmbeddingMode

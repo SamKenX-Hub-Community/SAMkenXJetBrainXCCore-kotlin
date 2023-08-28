@@ -32,7 +32,7 @@ class JsKlibBackendFacade(
     override val additionalServices: List<ServiceRegistrationData>
         get() = listOf(service(::JsIrIncrementalDataProvider))
 
-    constructor(testServices: TestServices): this(testServices, firstTimeCompilation = true)
+    constructor(testServices: TestServices) : this(testServices, firstTimeCompilation = true)
 
     override fun shouldRunAnalysis(module: TestModule): Boolean {
         return module.backendKind == inputKind
@@ -55,7 +55,6 @@ class JsKlibBackendFacade(
                 klibPath = outputFile,
                 JsEnvironmentConfigurator.getAllRecursiveLibrariesFor(module, testServices).keys.toList(),
                 inputArtifact.irModuleFragment,
-                inputArtifact.expectDescriptorToSymbol,
                 cleanFiles = inputArtifact.icData,
                 nopack = true,
                 perFile = false,
@@ -63,13 +62,13 @@ class JsKlibBackendFacade(
                 abiVersion = KotlinAbiVersion.CURRENT, // TODO get from test file data
                 jsOutputName = null
             ) {
-                inputArtifact.serializeSingleFile(it, null)
+                inputArtifact.serializeSingleFile(it, inputArtifact.irActualizerResult)
             }
         }
 
         val dependencies = JsEnvironmentConfigurator.getAllRecursiveDependenciesFor(module, testServices).toList()
         val lib = CommonKLibResolver.resolve(
-            dependencies.map { testServices.jsLibraryProvider.getPathByDescriptor(it) } + listOf(outputFile),
+            dependencies.map { testServices.libraryProvider.getPathByDescriptor(it) } + listOf(outputFile),
             configuration.resolverLogger
         ).getFullResolvedList().last().library
 
@@ -87,7 +86,7 @@ class JsKlibBackendFacade(
         if (JsEnvironmentConfigurator.incrementalEnabled(testServices)) {
             testServices.jsIrIncrementalDataProvider.recordIncrementalData(module, lib)
         }
-        testServices.jsLibraryProvider.setDescriptorAndLibraryByName(outputFile, moduleDescriptor, lib)
+        testServices.libraryProvider.setDescriptorAndLibraryByName(outputFile, moduleDescriptor, lib)
 
         return BinaryArtifacts.KLib(File(outputFile))
     }

@@ -132,6 +132,7 @@ fun IrDeclaration.toIrBasedDescriptor(): DeclarationDescriptor = when (this) {
     is IrField -> toIrBasedDescriptor()
     is IrTypeAlias -> toIrBasedDescriptor()
     is IrErrorDeclaration -> toIrBasedDescriptor()
+    is IrScript -> toIrBasedDescriptor()
     else -> error("Unknown declaration kind")
 }
 
@@ -1126,7 +1127,20 @@ open class IrBasedFieldDescriptor(owner: IrField) : PropertyDescriptor, IrBasedD
     override fun <V : Any?> getUserData(key: CallableDescriptor.UserDataKey<V>?): V? = null
 }
 
-fun IrField.toIrBasedDescriptor() = IrBasedFieldDescriptor(this)
+class IrBasedDelegateFieldDescriptor(owner: IrField) : IrBasedFieldDescriptor(owner), IrImplementingDelegateDescriptor {
+
+    override val correspondingSuperType: KotlinType
+        get() = TODO("not implemented")
+
+    override val isDelegated: Boolean
+        get() = true
+}
+
+fun IrField.toIrBasedDescriptor() = if (origin == IrDeclarationOrigin.DELEGATE) {
+    IrBasedDelegateFieldDescriptor(this)
+} else {
+    IrBasedFieldDescriptor(this)
+}
 
 class IrBasedErrorDescriptor(owner: IrErrorDeclaration) : IrBasedDeclarationDescriptor<IrErrorDeclaration>(owner) {
     override fun getName(): Name = error("IrBasedErrorDescriptor.getName: Should not be reached")
@@ -1247,7 +1261,11 @@ private fun IrSimpleFunctionSymbol.toIrBasedDescriptorIfPossible(): FunctionDesc
 private fun IrPropertySymbol.toIrBasedDescriptorIfPossible(): PropertyDescriptor =
     if (isBound) owner.toIrBasedDescriptor() else descriptor
 
-// this is a temporary solution for scripts - seems that introducing full-blown emulation of descriptors for the single degenerate case
-// doesn't make any sense.
+// this is a temporary solution for scripts
+// TODO: implement IR-based descriptors for scripts, see KT-60631
 @OptIn(ObsoleteDescriptorBasedAPI::class)
 private fun IrScriptSymbol.toIrBasedDescriptorIfPossible(): ScriptDescriptor = descriptor
+
+// see comment above to IrScriptSymbol.toIrBasedDescriptorIfPossible()
+@OptIn(ObsoleteDescriptorBasedAPI::class)
+private fun IrScript.toIrBasedDescriptor() = descriptor

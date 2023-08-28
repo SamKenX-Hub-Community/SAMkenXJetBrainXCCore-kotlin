@@ -11,24 +11,31 @@ import org.jetbrains.kotlin.diagnostics.KtDiagnosticRenderers
 import org.jetbrains.kotlin.diagnostics.WhenMissingCase
 import org.jetbrains.kotlin.diagnostics.rendering.ContextIndependentParameterRenderer
 import org.jetbrains.kotlin.diagnostics.rendering.Renderer
-import org.jetbrains.kotlin.fir.FirElement
 import org.jetbrains.kotlin.fir.FirModuleData
 import org.jetbrains.kotlin.fir.declarations.utils.*
-import org.jetbrains.kotlin.fir.render
+import org.jetbrains.kotlin.fir.expressions.FirExpression
+import org.jetbrains.kotlin.fir.expressions.calleeReference
+import org.jetbrains.kotlin.fir.expressions.unwrapSmartcastExpression
+import org.jetbrains.kotlin.fir.references.FirNamedReference
+import org.jetbrains.kotlin.fir.references.FirSuperReference
+import org.jetbrains.kotlin.fir.references.FirThisReference
 import org.jetbrains.kotlin.fir.renderer.*
 import org.jetbrains.kotlin.fir.symbols.FirBasedSymbol
 import org.jetbrains.kotlin.fir.symbols.SymbolInternals
 import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.renderReadableWithFqNames
+import org.jetbrains.kotlin.metadata.deserialization.VersionRequirement
 import org.jetbrains.kotlin.name.CallableId
+import org.jetbrains.kotlin.name.ClassId
 
 object FirDiagnosticRenderers {
     @OptIn(SymbolInternals::class)
     val SYMBOL = Renderer { symbol: FirBasedSymbol<*> ->
         when (symbol) {
             is FirClassLikeSymbol<*>,
-            is FirCallableSymbol<*> -> FirRenderer(
+            is FirCallableSymbol<*>,
+            -> FirRenderer(
                 typeRenderer = ConeTypeRenderer(),
                 idRenderer = ConeIdShortRenderer(),
                 classMemberRenderer = FirNoClassMemberRenderer(),
@@ -37,6 +44,7 @@ object FirDiagnosticRenderers {
                 callArgumentsRenderer = FirCallNoArgumentsRenderer(),
                 modifierRenderer = FirPartialModifierRenderer(),
                 valueParameterRenderer = FirValueParameterRendererNoDefaultValue(),
+                declarationRenderer = FirDeclarationRenderer("local ")
             ).renderElementAsString(symbol.fir, trim = true)
             is FirTypeParameterSymbol -> symbol.name.asString()
             else -> "???"
@@ -64,12 +72,17 @@ object FirDiagnosticRenderers {
         }
     }
 
-    val VARIABLE_NAME = Renderer { symbol: FirVariableSymbol<*> ->
-        symbol.name.asString()
+    val CALLEE_NAME = Renderer { element: FirExpression ->
+        when (val reference = element.unwrapSmartcastExpression().calleeReference) {
+            is FirNamedReference -> reference.name.asString()
+            is FirThisReference -> "this"
+            is FirSuperReference -> "super"
+            else -> "???"
+        }
     }
 
-    val FIR = Renderer { element: FirElement ->
-        element.render()
+    val VARIABLE_NAME = Renderer { symbol: FirVariableSymbol<*> ->
+        symbol.name.asString()
     }
 
     val DECLARATION_NAME = Renderer { symbol: FirBasedSymbol<*> ->
@@ -111,7 +124,7 @@ object FirDiagnosticRenderers {
     }
 
     val RENDER_TYPE = Renderer { t: ConeKotlinType ->
-        // TODO: need a way to tune granuality, e.g., without parameter names in functional types.
+        // TODO, KT-59811: need a way to tune granuality, e.g., without parameter names in functional types.
         t.renderReadableWithFqNames()
     }
 
@@ -119,9 +132,13 @@ object FirDiagnosticRenderers {
     val RENDER_TYPE_WITH_ANNOTATIONS = RENDER_TYPE
 
     val FQ_NAMES_IN_TYPES = Renderer { symbol: FirBasedSymbol<*> ->
+        val idRendererCreator = { ConeIdFullRenderer() }
         @OptIn(SymbolInternals::class)
         FirRenderer(
-            annotationRenderer = null, bodyRenderer = null, idRenderer = ConeIdFullRenderer()
+            annotationRenderer = null,
+            bodyRenderer = null,
+            idRenderer = idRendererCreator(),
+            typeRenderer = ConeTypeRendererWithJavaFlexibleTypes(idRendererCreator)
         ).renderElementAsString(symbol.fir, trim = true)
     }
 
@@ -134,7 +151,7 @@ object FirDiagnosticRenderers {
     private const val WHEN_MISSING_LIMIT = 7
 
     val WHEN_MISSING_CASES = Renderer { missingCases: List<WhenMissingCase> ->
-        if (missingCases.firstOrNull() == WhenMissingCase.Unknown) {
+        if (missingCases.singleOrNull() == WhenMissingCase.Unknown) {
             "'else' branch"
         } else {
             val list = missingCases.joinToString(", ", limit = WHEN_MISSING_LIMIT) { "'$it'" }
@@ -144,11 +161,14 @@ object FirDiagnosticRenderers {
     }
 
     val MODULE_DATA = Renderer<FirModuleData> {
-        "Module ${it.name}"
+        "module ${it.name}"
     }
 
     val NAME_OF_CONTAINING_DECLARATION_OR_FILE = Renderer { symbol: CallableId ->
-        val classId = symbol.classId
+        NAME_OF_DECLARATION_OR_FILE.render(symbol.classId)
+    }
+
+    val NAME_OF_DECLARATION_OR_FILE = Renderer { classId: ClassId? ->
         if (classId == null) {
             "file"
         } else {
@@ -162,12 +182,11 @@ object FirDiagnosticRenderers {
 
     val FUNCTIONAL_TYPE_KINDS = KtDiagnosticRenderers.COLLECTION(FUNCTIONAL_TYPE_KIND)
 
-    @Suppress("FunctionName")
-    fun <T> COLLECTION(renderer: ContextIndependentParameterRenderer<T>): ContextIndependentParameterRenderer<Collection<T>> {
-        return Renderer { list ->
-            list.joinToString(prefix = "[", postfix = "]", separator = ", ", limit = 3, truncated = "...") {
-                renderer.render(it)
-            }
-        }
+    val REQUIRE_KOTLIN_VERSION = Renderer { version: VersionRequirement.Version ->
+        if (version == VersionRequirement.Version.INFINITY) "" else " is only available since Kotlin ${version.asString()} and"
+    }
+
+    val OPTIONAL_SENTENCE = Renderer { it: String? ->
+        if (!it.isNullOrBlank()) " $it." else ""
     }
 }

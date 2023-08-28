@@ -15,8 +15,8 @@ import java.io.DataOutputStream
 import java.io.OutputStream
 import java.util.*
 
-fun JsIrProgramFragment.serializeTo(output: OutputStream) {
-    JsIrAstSerializer().append(this).saveTo(output)
+fun List<JsIrProgramFragment>.serializeTo(output: OutputStream) {
+    JsIrAstSerializer().appendAll(this).saveTo(output)
 }
 
 private class DataWriter {
@@ -89,6 +89,12 @@ private class JsIrAstSerializer {
     private val fileStack: Deque<String> = ArrayDeque()
     private val importedNames = mutableSetOf<JsName>()
 
+    fun appendAll(fragments: List<JsIrProgramFragment>): JsIrAstSerializer {
+        fragmentSerializer.writeInt(fragments.size)
+        fragments.forEach(::append)
+        return this
+    }
+
     fun append(fragment: JsIrProgramFragment): JsIrAstSerializer {
         importedNames += fragment.imports.map { fragment.nameBindings[it.key]!! }
         fragmentSerializer.writeFragment(fragment)
@@ -108,6 +114,7 @@ private class JsIrAstSerializer {
     }
 
     private fun DataWriter.writeFragment(fragment: JsIrProgramFragment) {
+        writeString(fragment.name)
         writeString(fragment.packageFqn)
 
         writeCollection(fragment.importedModules) {
@@ -437,9 +444,8 @@ private class JsIrAstSerializer {
                 ifNotNull(x.name) {
                     writeInt(internalizeName(it))
                 }
-                // TODO: add more complex JsNameRef parsing in future when we will support `class` expressions inside a `js` call
-                ifNotNull(x.baseClass?.name) {
-                    writeInt(internalizeName(it))
+                ifNotNull(x.baseClass) {
+                    writeExpression(it)
                 }
                 ifNotNull(x.constructor) {
                     writeFunction(it)

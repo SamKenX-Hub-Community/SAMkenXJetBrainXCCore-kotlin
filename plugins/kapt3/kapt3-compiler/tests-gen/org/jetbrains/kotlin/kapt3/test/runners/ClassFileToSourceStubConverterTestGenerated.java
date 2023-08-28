@@ -92,6 +92,12 @@ public class ClassFileToSourceStubConverterTestGenerated extends AbstractClassFi
     }
 
     @Test
+    @TestMetadata("anonymousObjectInEnumSuperConstructor.kt")
+    public void testAnonymousObjectInEnumSuperConstructor() throws Exception {
+        runTest("plugins/kapt3/kapt3-compiler/testData/converter/anonymousObjectInEnumSuperConstructor.kt");
+    }
+
+    @Test
     @TestMetadata("comments.kt")
     public void testComments() throws Exception {
         runTest("plugins/kapt3/kapt3-compiler/testData/converter/comments.kt");
@@ -119,6 +125,12 @@ public class ClassFileToSourceStubConverterTestGenerated extends AbstractClassFi
     @TestMetadata("defaultImpls.kt")
     public void testDefaultImpls() throws Exception {
         runTest("plugins/kapt3/kapt3-compiler/testData/converter/defaultImpls.kt");
+    }
+
+    @Test
+    @TestMetadata("defaultImplsWithTypeParameters.kt")
+    public void testDefaultImplsWithTypeParameters() throws Exception {
+        runTest("plugins/kapt3/kapt3-compiler/testData/converter/defaultImplsWithTypeParameters.kt");
     }
 
     @Test
@@ -167,6 +179,12 @@ public class ClassFileToSourceStubConverterTestGenerated extends AbstractClassFi
     @TestMetadata("delegationAndCompanionObject.kt")
     public void testDelegationAndCompanionObject() throws Exception {
         runTest("plugins/kapt3/kapt3-compiler/testData/converter/delegationAndCompanionObject.kt");
+    }
+
+    @Test
+    @TestMetadata("delegationToAnonymousObject.kt")
+    public void testDelegationToAnonymousObject() throws Exception {
+        runTest("plugins/kapt3/kapt3-compiler/testData/converter/delegationToAnonymousObject.kt");
     }
 
     @Test
@@ -518,6 +536,12 @@ public class ClassFileToSourceStubConverterTestGenerated extends AbstractClassFi
     }
 
     @Test
+    @TestMetadata("multifileClassDefaultPackage.kt")
+    public void testMultifileClassDefaultPackage() throws Exception {
+        runTest("plugins/kapt3/kapt3-compiler/testData/converter/multifileClassDefaultPackage.kt");
+    }
+
+    @Test
     @TestMetadata("nestedClasses.kt")
     public void testNestedClasses() throws Exception {
         runTest("plugins/kapt3/kapt3-compiler/testData/converter/nestedClasses.kt");
@@ -593,6 +617,12 @@ public class ClassFileToSourceStubConverterTestGenerated extends AbstractClassFi
     @TestMetadata("severalPackageParts.kt")
     public void testSeveralPackageParts() throws Exception {
         runTest("plugins/kapt3/kapt3-compiler/testData/converter/severalPackageParts.kt");
+    }
+
+    @Test
+    @TestMetadata("starImports.kt")
+    public void testStarImports() throws Exception {
+        runTest("plugins/kapt3/kapt3-compiler/testData/converter/starImports.kt");
     }
 
     @Test

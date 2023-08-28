@@ -43,6 +43,12 @@ public class SymbolLightClassesByFqNameForSourceTestGenerated extends AbstractSy
     }
 
     @Test
+    @TestMetadata("annotationBinaryRetention.kt")
+    public void testAnnotationBinaryRetention() throws Exception {
+        runTest("compiler/testData/asJava/lightClasses/lightClassByFqName/annotationBinaryRetention.kt");
+    }
+
+    @Test
     @TestMetadata("AnnotationClass.kt")
     public void testAnnotationClass() throws Exception {
         runTest("compiler/testData/asJava/lightClasses/lightClassByFqName/AnnotationClass.kt");
@@ -100,6 +106,12 @@ public class SymbolLightClassesByFqNameForSourceTestGenerated extends AbstractSy
     @TestMetadata("DataClassWithCustomImplementedMembers.kt")
     public void testDataClassWithCustomImplementedMembers() throws Exception {
         runTest("compiler/testData/asJava/lightClasses/lightClassByFqName/DataClassWithCustomImplementedMembers.kt");
+    }
+
+    @Test
+    @TestMetadata("DefaultImplsWithTypeParameters.kt")
+    public void testDefaultImplsWithTypeParameters() throws Exception {
+        runTest("compiler/testData/asJava/lightClasses/lightClassByFqName/DefaultImplsWithTypeParameters.kt");
     }
 
     @Test
@@ -373,6 +385,24 @@ public class SymbolLightClassesByFqNameForSourceTestGenerated extends AbstractSy
         @TestMetadata("ExpectedNestedClassInObject.kt")
         public void testExpectedNestedClassInObject() throws Exception {
             runTest("compiler/testData/asJava/lightClasses/lightClassByFqName/compilationErrors/ExpectedNestedClassInObject.kt");
+        }
+
+        @Test
+        @TestMetadata("FieldWithoutName.kt")
+        public void testFieldWithoutName() throws Exception {
+            runTest("compiler/testData/asJava/lightClasses/lightClassByFqName/compilationErrors/FieldWithoutName.kt");
+        }
+
+        @Test
+        @TestMetadata("FieldWithoutName2.kt")
+        public void testFieldWithoutName2() throws Exception {
+            runTest("compiler/testData/asJava/lightClasses/lightClassByFqName/compilationErrors/FieldWithoutName2.kt");
+        }
+
+        @Test
+        @TestMetadata("FieldWithoutName3.kt")
+        public void testFieldWithoutName3() throws Exception {
+            runTest("compiler/testData/asJava/lightClasses/lightClassByFqName/compilationErrors/FieldWithoutName3.kt");
         }
 
         @Test

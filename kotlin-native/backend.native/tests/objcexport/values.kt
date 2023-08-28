@@ -5,10 +5,11 @@
 
 // All classes and methods should be used in tests
 @file:Suppress("UNUSED")
-@file:OptIn(FreezingIsDeprecated::class, kotlin.native.runtime.NativeRuntimeApi::class)
+@file:OptIn(kotlin.experimental.ExperimentalNativeApi::class, FreezingIsDeprecated::class, kotlin.native.runtime.NativeRuntimeApi::class)
 
 package conversions
 
+import kotlin.concurrent.AtomicReference
 import kotlin.native.concurrent.freeze
 import kotlin.native.concurrent.isFrozen
 import kotlin.native.internal.ObjCErrorException
@@ -251,6 +252,7 @@ fun IC3.getValue3() = value
 fun IC3?.getValueOrNull3() = this?.value
 
 fun isFrozen(obj: Any): Boolean = obj.isFrozen
+@OptIn(kotlin.experimental.ExperimentalNativeApi::class)
 fun isFreezingEnabled() = Platform.isFreezingEnabled
 fun kotlinLambda(block: (Any) -> Any): Any = block
 
@@ -945,7 +947,7 @@ class TestStringConversion {
     lateinit var str: Any
 }
 
-fun foo(a: kotlin.native.concurrent.AtomicReference<*>) {}
+fun foo(a: kotlin.concurrent.AtomicReference<*>) {}
 
 interface GH3825 {
     @Throws(MyException::class) fun call0(callback: () -> Boolean)

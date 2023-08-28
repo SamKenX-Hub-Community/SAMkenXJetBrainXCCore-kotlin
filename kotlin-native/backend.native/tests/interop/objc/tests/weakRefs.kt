@@ -1,4 +1,4 @@
-@file:OptIn(kotlin.native.runtime.NativeRuntimeApi::class)
+@file:OptIn(kotlin.experimental.ExperimentalNativeApi::class, kotlin.native.runtime.NativeRuntimeApi::class)
 
 import kotlin.native.ref.*
 import kotlinx.cinterop.*
@@ -10,7 +10,8 @@ import objcTests.*
 
     createAndAbandonWeakRef(NSObject())
 
-    testWeakReference({ NSArray.arrayWithArray(listOf(42)) as NSArray })
+    // Uncomment when KT-61418 fixed
+    //testWeakReference({ NSArray.arrayWithArray(listOf(42)) as NSArray })
 }
 
 private fun testWeakReference(block: () -> NSObject) {

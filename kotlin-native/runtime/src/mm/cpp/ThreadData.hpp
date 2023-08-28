@@ -11,9 +11,6 @@
 #include "GlobalData.hpp"
 #include "GlobalsRegistry.hpp"
 #include "GC.hpp"
-#include "GCScheduler.hpp"
-#include "ObjectFactory.hpp"
-#include "ExtraObjectDataFactory.hpp"
 #include "ShadowStack.hpp"
 #include "SpecialRefRegistry.hpp"
 #include "ThreadLocalStorage.hpp"
@@ -34,7 +31,7 @@ public:
         threadId_(threadId),
         globalsThreadQueue_(GlobalsRegistry::Instance()),
         specialRefRegistry_(SpecialRefRegistry::instance()),
-        extraObjectDataThreadQueue_(ExtraObjectDataFactory::Instance()),
+        gcScheduler_(GlobalData::Instance().gcScheduler(), *this),
         gc_(GlobalData::Instance().gc(), *this),
         suspensionData_(ThreadState::kNative, *this) {}
 
@@ -48,8 +45,6 @@ public:
 
     SpecialRefRegistry::ThreadQueue& specialRefRegistry() noexcept { return specialRefRegistry_; }
 
-    ExtraObjectDataFactory::ThreadQueue& extraObjectDataThreadQueue() noexcept { return extraObjectDataThreadQueue_; }
-
     ThreadState state() noexcept { return suspensionData_.state(); }
 
     ThreadState setState(ThreadState state) noexcept { return suspensionData_.setState(state); }
@@ -57,6 +52,8 @@ public:
     ShadowStack& shadowStack() noexcept { return shadowStack_; }
 
     std_support::vector<std::pair<ObjHeader**, ObjHeader*>>& initializingSingletons() noexcept { return initializingSingletons_; }
+
+    gcScheduler::GCScheduler::ThreadData& gcScheduler() noexcept { return gcScheduler_; }
 
     gc::GC::ThreadData& gc() noexcept { return gc_; }
 
@@ -66,14 +63,11 @@ public:
         // TODO: These use separate locks, which is inefficient.
         globalsThreadQueue_.Publish();
         specialRefRegistry_.publish();
-        extraObjectDataThreadQueue_.Publish();
-        gc_.Publish();
     }
 
     void ClearForTests() noexcept {
         globalsThreadQueue_.ClearForTests();
         specialRefRegistry_.clearForTests();
-        extraObjectDataThreadQueue_.ClearForTests();
         gc_.ClearForTests();
     }
 
@@ -82,8 +76,8 @@ private:
     GlobalsRegistry::ThreadQueue globalsThreadQueue_;
     ThreadLocalStorage tls_;
     SpecialRefRegistry::ThreadQueue specialRefRegistry_;
-    ExtraObjectDataFactory::ThreadQueue extraObjectDataThreadQueue_;
     ShadowStack shadowStack_;
+    gcScheduler::GCScheduler::ThreadData gcScheduler_;
     gc::GC::ThreadData gc_;
     std_support::vector<std::pair<ObjHeader**, ObjHeader*>> initializingSingletons_;
     ThreadSuspensionData suspensionData_;

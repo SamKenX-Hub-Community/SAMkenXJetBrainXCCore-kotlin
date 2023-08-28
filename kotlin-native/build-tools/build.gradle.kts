@@ -36,7 +36,6 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-native-utils:${project.bootstrapKotlinVersion}")
 
     // To build Konan Gradle plugin
-    implementation("org.jetbrains.kotlin:kotlin-build-common:${project.bootstrapKotlinVersion}")
     implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:${project.bootstrapKotlinVersion}")
 
     val versionProperties = Properties()
@@ -73,12 +72,13 @@ val compileKotlin: KotlinCompile by tasks
 val compileGroovy: GroovyCompile by tasks
 
 compileKotlin.apply {
-    kotlinOptions {
-        freeCompilerArgs += listOf(
+    compilerOptions {
+        optIn.add("kotlin.ExperimentalStdlibApi")
+        freeCompilerArgs.addAll(
+            listOf(
                 "-Xskip-prerelease-check",
                 "-Xsuppress-version-warnings",
-                "-opt-in=kotlin.ExperimentalStdlibApi",
-                "-opt-in=kotlin.RequiresOptIn"
+            )
         )
     }
 }

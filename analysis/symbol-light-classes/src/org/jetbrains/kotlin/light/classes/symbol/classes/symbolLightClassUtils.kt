@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.light.classes.symbol.classes
 
+import com.intellij.openapi.util.ModificationTracker
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
 import com.intellij.psi.PsiModifier
@@ -22,6 +23,7 @@ import org.jetbrains.kotlin.analysis.api.types.KtType
 import org.jetbrains.kotlin.analysis.api.types.KtTypeMappingMode
 import org.jetbrains.kotlin.analysis.project.structure.KtModule
 import org.jetbrains.kotlin.analysis.project.structure.KtSourceModule
+import org.jetbrains.kotlin.analysis.providers.createProjectWideOutOfBlockModificationTracker
 import org.jetbrains.kotlin.analysis.utils.errors.requireIsInstance
 import org.jetbrains.kotlin.analysis.utils.printer.parentOfType
 import org.jetbrains.kotlin.asJava.builder.LightMemberOriginForDeclaration
@@ -35,18 +37,17 @@ import org.jetbrains.kotlin.config.JvmDefaultMode
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
 import org.jetbrains.kotlin.lexer.KtTokens.*
-import org.jetbrains.kotlin.light.classes.symbol.*
-import org.jetbrains.kotlin.light.classes.symbol.annotations.*
+import org.jetbrains.kotlin.light.classes.symbol.annotations.hasJvmOverloadsAnnotation
+import org.jetbrains.kotlin.light.classes.symbol.annotations.hasJvmStaticAnnotation
+import org.jetbrains.kotlin.light.classes.symbol.annotations.isHiddenOrSynthetic
+import org.jetbrains.kotlin.light.classes.symbol.annotations.toOptionalFilter
 import org.jetbrains.kotlin.light.classes.symbol.copy
 import org.jetbrains.kotlin.light.classes.symbol.fields.SymbolLightField
 import org.jetbrains.kotlin.light.classes.symbol.fields.SymbolLightFieldForEnumEntry
 import org.jetbrains.kotlin.light.classes.symbol.fields.SymbolLightFieldForProperty
+import org.jetbrains.kotlin.light.classes.symbol.isJvmField
 import org.jetbrains.kotlin.light.classes.symbol.mapType
-import org.jetbrains.kotlin.light.classes.symbol.methods.SymbolLightAccessorMethod
-import org.jetbrains.kotlin.light.classes.symbol.methods.SymbolLightAnnotationsMethod
-import org.jetbrains.kotlin.light.classes.symbol.methods.SymbolLightConstructor
-import org.jetbrains.kotlin.light.classes.symbol.methods.SymbolLightNoArgConstructor
-import org.jetbrains.kotlin.light.classes.symbol.methods.SymbolLightSimpleMethod
+import org.jetbrains.kotlin.light.classes.symbol.methods.*
 import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.psi.*
@@ -67,6 +68,16 @@ internal fun createLightClassNoCache(ktClassOrObject: KtClassOrObject, ktModule:
     ktClassOrObject is KtClass && ktClassOrObject.isAnnotation() -> SymbolLightClassForAnnotationClass(ktClassOrObject, ktModule)
     ktClassOrObject is KtClass && ktClassOrObject.isInterface() -> SymbolLightClassForInterface(ktClassOrObject, ktModule)
     else -> SymbolLightClassForClassOrObject(ktClassOrObject, ktModule)
+}
+
+internal fun KtClassOrObject.modificationTrackerForClassInnerStuff(): List<ModificationTracker> {
+    val outOfBlockTracker = project.createProjectWideOutOfBlockModificationTracker()
+    return if (isLocal) {
+        val file = containingKtFile
+        listOf(outOfBlockTracker, ModificationTracker { file.modificationStamp })
+    } else {
+        listOf(outOfBlockTracker)
+    }
 }
 
 context(KtAnalysisSession)
@@ -391,6 +402,7 @@ internal fun SymbolLightClassBase.createField(
     isStatic: Boolean,
     result: MutableList<KtLightField>
 ) {
+    if (declaration.name.isSpecial) return
     if (!hasBackingField(declaration)) return
 
     val isDelegated = (declaration as? KtKotlinPropertySymbol)?.isDelegatedProperty == true
@@ -423,7 +435,8 @@ private fun hasBackingField(property: KtPropertySymbol): Boolean {
     }
 
     val fieldUseSite = AnnotationUseSiteTarget.FIELD
-    if (property.modality == Modality.ABSTRACT ||
+    if (property.isExpect ||
+        property.modality == Modality.ABSTRACT ||
         property.isHiddenOrSynthetic(fieldUseSite, fieldUseSite.toOptionalFilter())
     ) return false
 

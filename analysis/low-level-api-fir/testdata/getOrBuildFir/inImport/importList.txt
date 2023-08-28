@@ -4,3 +4,6 @@ FIR source kind: null
 
 FIR element rendered:
 null
+
+FIR FILE:
+FILE: [ResolvedTo(RAW_FIR)] importList.kt

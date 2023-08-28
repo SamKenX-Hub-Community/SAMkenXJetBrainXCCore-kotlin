@@ -19,12 +19,14 @@ fun FirSessionConfigurator.registerCommonCheckers() {
     useCheckers(CommonDeclarationCheckers)
     useCheckers(CommonExpressionCheckers)
     useCheckers(CommonTypeCheckers)
+    useCheckers(CommonLanguageVersionSettingsCheckers)
 }
 
 fun FirSessionConfigurator.registerExtendedCommonCheckers() {
     useCheckers(ExtendedExpressionCheckers)
     useCheckers(ExtendedDeclarationCheckers)
     useCheckers(ExtendedTypeCheckers)
+    useCheckers(ExtendedLanguageVersionSettingsCheckers)
 }
 
 fun FirSessionConfigurator.registerJvmCheckers() {
@@ -41,4 +43,8 @@ fun FirSessionConfigurator.registerJsCheckers() {
 fun FirSessionConfigurator.registerNativeCheckers() {
     useCheckers(NativeDeclarationCheckers)
     useCheckers(NativeExpressionCheckers)
+}
+
+fun FirSessionConfigurator.registerWasmCheckers() {
+    // TODO: Implement Wasm checkers (KT-56849)
 }

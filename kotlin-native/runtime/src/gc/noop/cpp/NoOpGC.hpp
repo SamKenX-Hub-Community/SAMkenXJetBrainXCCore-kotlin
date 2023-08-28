@@ -8,11 +8,10 @@
 
 #include <cstddef>
 
-#include "Allocator.hpp"
-#include "GCScheduler.hpp"
-#include "ObjectFactory.hpp"
+#include "AllocatorImpl.hpp"
+#include "GC.hpp"
+#include "Logging.hpp"
 #include "Utils.hpp"
-#include "Types.h"
 
 namespace kotlin {
 
@@ -26,41 +25,25 @@ namespace gc {
 // TODO: It can be made more efficient.
 class NoOpGC : private Pinned {
 public:
-    class ObjectData {};
-
-    using Allocator = gc::Allocator;
-
     class ThreadData : private Pinned {
     public:
-        using ObjectData = NoOpGC::ObjectData;
-
-        ThreadData(NoOpGC& gc, mm::ThreadData& threadData, GCSchedulerThreadData&) noexcept {}
+        ThreadData() noexcept {}
         ~ThreadData() = default;
-
-        void SafePointFunctionPrologue() noexcept {}
-        void SafePointLoopBody() noexcept {}
-        void SafePointAllocation(size_t size) noexcept {}
-
-        void Schedule() noexcept {}
-        void ScheduleAndWaitFullGC() noexcept {}
-        void ScheduleAndWaitFullGCWithFinalizers() noexcept {}
-
-        void OnOOM(size_t size) noexcept {}
-
-        Allocator CreateAllocator() noexcept { return Allocator(); }
 
     private:
     };
 
-    NoOpGC(mm::ObjectFactory<NoOpGC>&, GCScheduler&) noexcept {
-        RuntimeLogDebug({kTagGC}, "No-op GC initialized");
-    }
+    NoOpGC() noexcept { RuntimeLogInfo({kTagGC}, "No-op GC initialized"); }
     ~NoOpGC() = default;
 
-    GCScheduler& scheduler() noexcept { return scheduler_; }
+#ifdef CUSTOM_ALLOCATOR
+    alloc::Heap& heap() noexcept { return heap_; }
+#endif
 
 private:
-    GCScheduler scheduler_;
+#ifdef CUSTOM_ALLOCATOR
+    alloc::Heap heap_;
+#endif
 };
 
 } // namespace gc

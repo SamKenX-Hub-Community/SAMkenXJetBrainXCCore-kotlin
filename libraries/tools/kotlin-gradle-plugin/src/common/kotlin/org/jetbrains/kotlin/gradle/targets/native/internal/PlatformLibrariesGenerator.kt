@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.gradle.targets.native.internal
 import org.gradle.api.Project
 import org.jetbrains.kotlin.compilerRunner.KotlinNativeLibraryGenerationRunner
 import org.jetbrains.kotlin.compilerRunner.getKonanCacheKind
+import org.jetbrains.kotlin.compilerRunner.konanDataDir
 import org.jetbrains.kotlin.compilerRunner.konanHome
 import org.jetbrains.kotlin.gradle.dsl.NativeCacheKind
 import org.jetbrains.kotlin.gradle.plugin.PropertiesProvider
@@ -28,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap
 internal class PlatformLibrariesGenerator(val project: Project, val konanTarget: KonanTarget) {
 
     private val distribution =
-        customerDistribution(project.konanHome)
+        customerDistribution(project.konanHome, konanDataDir = project.konanDataDir)
 
     private val platformLibsDirectory =
         File(distribution.platformLibs(konanTarget)).absoluteFile
@@ -45,10 +46,6 @@ internal class PlatformLibrariesGenerator(val project: Project, val konanTarget:
 
     private val shouldBuildCaches: Boolean =
         konanPropertiesService.cacheWorksFor(konanTarget) && konanCacheKind != NativeCacheKind.NONE
-
-    private val mode: String? by lazy {
-        PropertiesProvider(project).nativePlatformLibrariesMode
-    }
 
     private val presentDefs: Set<String> by lazy {
         defDirectory
@@ -126,11 +123,6 @@ internal class PlatformLibrariesGenerator(val project: Project, val konanTarget:
                 args.addArg("-cache-arg", it)
             }
         }
-
-        mode?.let {
-            args.addArg("-mode", it)
-        }
-
         KotlinNativeLibraryGenerationRunner.fromProject(this).run(args)
     }
 

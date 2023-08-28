@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.backend.jvm.ir.extensionReceiverName
 import org.jetbrains.kotlin.backend.jvm.ir.isStaticValueClassReplacement
 import org.jetbrains.kotlin.backend.jvm.ir.parentClassId
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.IrBuiltIns
@@ -35,6 +36,9 @@ class MemoizedInlineClassReplacements(
 
     val originalFunctionForStaticReplacement: MutableMap<IrFunction, IrFunction> = ConcurrentHashMap()
     val originalFunctionForMethodReplacement: MutableMap<IrFunction, IrFunction> = ConcurrentHashMap()
+
+    private val mangleCallsToJavaMethodsWithValueClasses =
+        context.state.languageVersionSettings.supportsFeature(LanguageFeature.MangleCallsToJavaMethodsWithValueClasses)
 
     /**
      * Get a replacement for a function or a constructor.
@@ -76,13 +80,18 @@ class MemoizedInlineClassReplacements(
                     }
 
                 // Otherwise, mangle functions with mangled parameters, ignoring constructors
-                it is IrSimpleFunction && !it.isFromJava() &&
-                        (it.hasMangledParameters(includeMFVC = false) || mangleReturnTypes && it.hasMangledReturnType) ->
-                    createMethodReplacement(it)
+                it is IrSimpleFunction && it.needsReplacement -> createMethodReplacement(it)
 
                 else ->
                     null
             }
+        }
+
+    private val IrSimpleFunction.needsReplacement: Boolean
+        get() {
+            if (!hasMangledParameters(includeMFVC = false) && !(mangleReturnTypes && hasMangledReturnType)) return false
+            if (isFromJava()) return mangleCallsToJavaMethodsWithValueClasses && !overridesOnlyMethodsFromJava()
+            return true
         }
 
     /**
@@ -211,7 +220,7 @@ class MemoizedInlineClassReplacements(
         noFakeOverride: Boolean = false,
         body: IrFunction.() -> Unit
     ): IrSimpleFunction {
-        val useOldManglingScheme = context.state.useOldManglingSchemeForFunctionsWithInlineClassesInSignatures
+        val useOldManglingScheme = context.config.useOldManglingSchemeForFunctionsWithInlineClassesInSignatures
         val replacement = buildReplacementInner(function, replacementOrigin, noFakeOverride, useOldManglingScheme, body)
         // When using the new mangling scheme we might run into dependencies using the old scheme
         // for which we will fall back to the old mangling scheme as well.

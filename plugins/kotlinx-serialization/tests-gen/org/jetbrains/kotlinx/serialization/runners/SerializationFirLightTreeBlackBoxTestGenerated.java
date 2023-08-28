@@ -94,6 +94,12 @@ public class SerializationFirLightTreeBlackBoxTestGenerated extends AbstractSeri
         }
 
         @Test
+        @TestMetadata("expectActualSealedClass.kt")
+        public void testExpectActualSealedClass() throws Exception {
+            runTest("plugins/kotlinx-serialization/testData/boxIr/expectActualSealedClass.kt");
+        }
+
+        @Test
         @TestMetadata("externalSerialierJava.kt")
         public void testExternalSerialierJava() throws Exception {
             runTest("plugins/kotlinx-serialization/testData/boxIr/externalSerialierJava.kt");
@@ -133,6 +139,12 @@ public class SerializationFirLightTreeBlackBoxTestGenerated extends AbstractSeri
         @TestMetadata("inlineClasses.kt")
         public void testInlineClasses() throws Exception {
             runTest("plugins/kotlinx-serialization/testData/boxIr/inlineClasses.kt");
+        }
+
+        @Test
+        @TestMetadata("interfaces.kt")
+        public void testInterfaces() throws Exception {
+            runTest("plugins/kotlinx-serialization/testData/boxIr/interfaces.kt");
         }
 
         @Test
@@ -190,6 +202,12 @@ public class SerializationFirLightTreeBlackBoxTestGenerated extends AbstractSeri
         }
 
         @Test
+        @TestMetadata("namedCompanions.kt")
+        public void testNamedCompanions() throws Exception {
+            runTest("plugins/kotlinx-serialization/testData/boxIr/namedCompanions.kt");
+        }
+
+        @Test
         @TestMetadata("repeatableSerialInfo.kt")
         public void testRepeatableSerialInfo() throws Exception {
             runTest("plugins/kotlinx-serialization/testData/boxIr/repeatableSerialInfo.kt");
@@ -223,6 +241,18 @@ public class SerializationFirLightTreeBlackBoxTestGenerated extends AbstractSeri
         @TestMetadata("serializableOnPropertyType.kt")
         public void testSerializableOnPropertyType() throws Exception {
             runTest("plugins/kotlinx-serialization/testData/boxIr/serializableOnPropertyType.kt");
+        }
+
+        @Test
+        @TestMetadata("serializerFactory.kt")
+        public void testSerializerFactory() throws Exception {
+            runTest("plugins/kotlinx-serialization/testData/boxIr/serializerFactory.kt");
+        }
+
+        @Test
+        @TestMetadata("serializerFactoryInUserDefined.kt")
+        public void testSerializerFactoryInUserDefined() throws Exception {
+            runTest("plugins/kotlinx-serialization/testData/boxIr/serializerFactoryInUserDefined.kt");
         }
 
         @Test

@@ -70,10 +70,14 @@ internal class JsUsefulDeclarationProcessor(
                     referencedJsClassesFromExpressions += ref.owner
                 }
 
+                context.reflectionSymbols.getKClass -> {
+                    addConstructedClass(expression.getTypeArgument(0)!!.classifierOrFail.owner as IrClass)
+                }
+
                 context.intrinsics.jsObjectCreateSymbol -> {
                     val classToCreate = expression.getTypeArgument(0)!!.classifierOrFail.owner as IrClass
                     classToCreate.enqueue(data, "intrinsic: jsObjectCreateSymbol")
-                    constructedClasses += classToCreate
+                    addConstructedClass(classToCreate)
                 }
 
                 context.intrinsics.jsCreateThisSymbol -> {
@@ -88,7 +92,7 @@ internal class JsUsefulDeclarationProcessor(
                     val classToCreate = classTypeToCreate.classifierOrFail.owner as IrClass
 
                     classToCreate.enqueue(data, "intrinsic: jsCreateThis")
-                    constructedClasses += classToCreate
+                    addConstructedClass(classToCreate)
                 }
 
                 context.intrinsics.jsEquals -> {
@@ -117,7 +121,14 @@ internal class JsUsefulDeclarationProcessor(
                 }
             }
         }
+    }
 
+    override fun addConstructedClass(irClass: IrClass) {
+        super.addConstructedClass(irClass)
+
+        if (irClass.isClass) {
+            context.findDefaultConstructorFor(irClass)?.enqueue(irClass, "intrinsic: KClass<*>.createInstance")
+        }
     }
 
     override fun processSuperTypes(irClass: IrClass) {
@@ -159,7 +170,7 @@ internal class JsUsefulDeclarationProcessor(
             context.intrinsics.jsPrototypeOfSymbol.owner.enqueue(irClass, "interface default implementation")
         }
 
-        if ((!context.es6mode || !isEsModules) && (irClass.isInner || irClass.isObject)) {
+        if (irClass.isInner || irClass.isObject) {
             context.intrinsics.jsDefinePropertySymbol.owner.enqueue(irClass, "object lazy initialization")
         }
 
@@ -178,14 +189,12 @@ internal class JsUsefulDeclarationProcessor(
         super.processSimpleFunction(irFunction)
 
         if (irFunction.isEs6ConstructorReplacement) {
-            constructedClasses += irFunction.dispatchReceiverParameter?.type?.classOrNull?.owner!!
+            addConstructedClass(irFunction.dispatchReceiverParameter?.type?.classOrNull?.owner!!)
         }
 
         if (irFunction.isReal && irFunction.body != null) {
             irFunction.parentClassOrNull?.takeIf { it.isInterface }?.enqueue(irFunction, "interface default method is used")
         }
-
-        if (context.es6mode && isEsModules) return
 
         val property = irFunction.correspondingPropertySymbol?.owner ?: return
 

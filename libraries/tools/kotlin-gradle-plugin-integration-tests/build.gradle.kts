@@ -85,11 +85,11 @@ dependencies {
     testImplementation(kotlinStdlib("jdk8"))
     testImplementation(project(":kotlin-parcelize-compiler"))
     testImplementation(commonDependency("org.jetbrains.intellij.deps", "trove4j"))
-    testImplementation(commonDependency("io.ktor", "ktor-server-test-host"))
-    testImplementation(commonDependency("io.ktor", "ktor-server-core"))
-    testImplementation(commonDependency("io.ktor", "ktor-client-cio"))
-    testImplementation(commonDependency("io.ktor", "ktor-server-netty"))
-    testImplementation(commonDependency("io.ktor", "ktor-client-mock"))
+    testImplementation(libs.ktor.client.cio)
+    testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.ktor.server.core)
+    testImplementation(libs.ktor.server.netty)
+    testImplementation(libs.ktor.server.test.host)
 
     testImplementation(gradleApi())
     testImplementation(gradleTestKit())
@@ -105,10 +105,10 @@ dependencies {
 }
 
 // Aapt2 from Android Gradle Plugin 3.2 and below does not handle long paths on Windows.
-val shortenTempRootName = project.providers.systemProperty("os.name").forUseAtConfigurationTime().get().contains("Windows")
+val shortenTempRootName = project.providers.systemProperty("os.name").get().contains("Windows")
 
 val splitGradleIntegrationTestTasks =
-    project.providers.gradleProperty("gradle.integration.tests.split.tasks").forUseAtConfigurationTime().orNull?.toBoolean()
+    project.providers.gradleProperty("gradle.integration.tests.split.tasks").orNull?.toBoolean()
         ?: project.kotlinBuildProperties.isTeamcityBuild
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
@@ -141,7 +141,7 @@ fun Test.includeTestsWithPattern(include: Boolean, patterns: (MutableSet<String>
 }
 
 fun Test.advanceGradleVersion() {
-    val gradleVersionForTests = "7.6"
+    val gradleVersionForTests = "8.1.1"
     systemProperty("kotlin.gradle.version.for.tests", gradleVersionForTests)
 }
 
@@ -355,9 +355,10 @@ tasks.withType<Test> {
     val jdk11Provider = project.getToolchainJdkHomeFor(JdkMajorVersion.JDK_11_0)
     val jdk16Provider = project.getToolchainJdkHomeFor(JdkMajorVersion.JDK_16_0)
     val jdk17Provider = project.getToolchainJdkHomeFor(JdkMajorVersion.JDK_17_0)
-    val mavenLocalRepo = project.providers.systemProperty("maven.repo.local").forUseAtConfigurationTime().orNull
+    val mavenLocalRepo = project.providers.systemProperty("maven.repo.local").orNull
 
     // Query required JDKs paths only on execution phase to avoid triggering auto-download on project configuration phase
+    // names should follow "jdk\\d+Home" regex where number is a major JDK version
     doFirst {
         systemProperty("jdk8Home", jdk8Provider.get())
         systemProperty("jdk9Home", jdk9Provider.get())

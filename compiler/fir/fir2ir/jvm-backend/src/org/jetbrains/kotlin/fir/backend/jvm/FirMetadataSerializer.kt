@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.fir.backend.jvm
 
+import org.jetbrains.kotlin.KtFakeSourceElementKind
 import org.jetbrains.kotlin.backend.common.actualizer.IrActualizedResult
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
@@ -12,24 +13,18 @@ import org.jetbrains.kotlin.backend.jvm.metadata.MetadataSerializer
 import org.jetbrains.kotlin.codegen.ClassBuilderMode
 import org.jetbrains.kotlin.codegen.serialization.JvmSerializationBindings
 import org.jetbrains.kotlin.config.*
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.*
 import org.jetbrains.kotlin.fir.backend.Fir2IrComponents
 import org.jetbrains.kotlin.fir.backend.FirMetadataSource
 import org.jetbrains.kotlin.fir.backend.extractFirDeclarations
-import org.jetbrains.kotlin.fir.containingClassForLocal
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.declarations.builder.*
-import org.jetbrains.kotlin.fir.languageVersionSettings
-import org.jetbrains.kotlin.fir.packageFqName
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.toFirRegularClass
 import org.jetbrains.kotlin.fir.serialization.FirElementAwareStringTable
 import org.jetbrains.kotlin.fir.serialization.FirElementSerializer
 import org.jetbrains.kotlin.fir.serialization.TypeApproximatorForMetadataSerializer
-import org.jetbrains.kotlin.fir.symbols.impl.FirAnonymousFunctionSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirDelegateFieldSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirPropertyAccessorSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
+import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
@@ -104,7 +99,8 @@ fun makeLocalFirMetadataSerializerForMetadataSource(
         configuration.metadataVersion(session.languageVersionSettings.languageVersion),
         session.languageVersionSettings.getFlag(JvmAnalysisFlags.jvmDefaultMode),
         stringTable,
-        constValueProvider = null
+        constValueProvider = null,
+        additionalAnnotationsProvider = null
     )
     return FirMetadataSerializer(
         globalSerializationBindings,
@@ -162,8 +158,20 @@ class FirMetadataSerializer(
     }
 
     override fun bindFieldMetadata(metadata: MetadataSource.Property, signature: Pair<Type, String>) {
-        val fir = (metadata as FirMetadataSource.Property).fir
-        globalSerializationBindings.put(FirJvmSerializerExtension.FIELD_FOR_PROPERTY, fir, signature)
+        when (metadata) {
+            is FirMetadataSource.Property -> globalSerializationBindings.put(
+                FirJvmSerializerExtension.FIELD_FOR_PROPERTY,
+                metadata.fir,
+                signature,
+            )
+            is FirMetadataSource.Field -> metadata.fir.run {
+                // We don't serialize synthetic delegate fields, and we don't expect any other fields here.
+                require(source?.kind == KtFakeSourceElementKind.ClassDelegationField) {
+                    "Expected delegate field, got ${render()} with source kind ${source?.kind}"
+                }
+            }
+            else -> error("Unexpected metadata: $metadata")
+        }
     }
 }
 
@@ -219,6 +227,7 @@ private fun FirFunction.copyToFreeAnonymousFunction(approximator: AbstractTypeAp
         hasExplicitParameterList = (function as? FirAnonymousFunction)?.hasExplicitParameterList == true
         valueParameters.addAll(function.valueParameters.map {
             buildValueParameterCopy(it) {
+                symbol = FirValueParameterSymbol(it.name)
                 returnTypeRef = it.returnTypeRef.approximated(approximator, typeParameterSet, toSuper = false)
             }
         })
@@ -243,6 +252,7 @@ private fun FirPropertyAccessor.copyToFreeAccessor(
         status = accessor.status
         accessor.valueParameters.mapTo(valueParameters) {
             buildValueParameterCopy(it) {
+                symbol = FirValueParameterSymbol(it.name)
                 returnTypeRef = it.returnTypeRef.approximated(approximator, typeParameterSet, toSuper = false)
             }
         }

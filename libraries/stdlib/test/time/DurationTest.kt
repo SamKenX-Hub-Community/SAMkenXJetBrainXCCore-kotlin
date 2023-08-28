@@ -6,10 +6,11 @@
 @file:Suppress("INVISIBLE_MEMBER")
 package test.time
 
+import test.TestPlatform
+import test.current
 import test.numbers.assertAlmostEquals
 import kotlin.math.nextDown
 import kotlin.math.pow
-import kotlin.native.concurrent.SharedImmutable
 import kotlin.test.*
 import kotlin.time.*
 import kotlin.random.*
@@ -21,8 +22,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
-@SharedImmutable
-private val units = DurationUnit.values()
+private val units = DurationUnit.entries
 
 class DurationTest {
 
@@ -611,6 +611,8 @@ class DurationTest {
 
     @Test
     fun parseAndFormatInUnits() {
+        if (TestPlatform.current == TestPlatform.WasmWasi) return
+
         var d = 1.days + 15.hours + 31.minutes + 45.seconds +
                 678.milliseconds + 920.microseconds + 516.34.nanoseconds
 

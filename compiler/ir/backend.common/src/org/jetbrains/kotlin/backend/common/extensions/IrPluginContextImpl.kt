@@ -14,6 +14,8 @@ import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.ir.IrBuiltIns
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
+import org.jetbrains.kotlin.ir.declarations.IrDeclaration
+import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.linkage.IrDeserializer
 import org.jetbrains.kotlin.ir.symbols.*
 import org.jetbrains.kotlin.ir.util.IdSignature
@@ -50,6 +52,9 @@ open class IrPluginContextImpl constructor(
     override val moduleDescriptor: ModuleDescriptor = module
 
     override val symbolTable: ReferenceSymbolTable = st
+
+    final override val annotationsRegistrar: IrAnnotationsFromPluginRegistrar
+        get() = DummyIrAnnotationsFromPluginRegistrar
 
     private fun resolveMemberScope(fqName: FqName): MemberScope? {
         val pkg = module.getPackage(fqName)
@@ -106,7 +111,7 @@ open class IrPluginContextImpl constructor(
         return resolveSymbol(fqName.parent()) { scope ->
             val classDescriptor = scope.getContributedClassifier(fqName.shortName(), NoLookupLocation.FROM_BACKEND) as? ClassDescriptor?
             classDescriptor?.let {
-                st.referenceClass(it)
+                st.descriptorExtension.referenceClass(it)
             }
         }
     }
@@ -117,14 +122,13 @@ open class IrPluginContextImpl constructor(
         return resolveSymbol(fqName.parent()) { scope ->
             val aliasDescriptor = scope.getContributedClassifier(fqName.shortName(), NoLookupLocation.FROM_BACKEND) as? TypeAliasDescriptor?
             aliasDescriptor?.let {
-                st.referenceTypeAlias(it)
+                st.descriptorExtension.referenceTypeAlias(it)
             }
         }
     }
 
     @OptIn(FirIncompatiblePluginAPI::class)
     override fun referenceConstructors(classFqn: FqName): Collection<IrConstructorSymbol> {
-        @Suppress("DEPRECATION")
         val classSymbol = referenceClass(classFqn) ?: error("Cannot find class $classFqn")
         return classSymbol.owner.declarations.filterIsInstance<IrConstructor>().map { it.symbol }
     }
@@ -134,7 +138,7 @@ open class IrPluginContextImpl constructor(
         assert(!fqName.isRoot)
         return resolveSymbolCollection(fqName.parent()) { scope ->
             val descriptors = scope.getContributedFunctions(fqName.shortName(), NoLookupLocation.FROM_BACKEND)
-            descriptors.map { st.referenceSimpleFunction(it) }
+            descriptors.map { st.descriptorExtension.referenceSimpleFunction(it) }
         }
     }
 
@@ -143,7 +147,7 @@ open class IrPluginContextImpl constructor(
         assert(!fqName.isRoot)
         return resolveSymbolCollection(fqName.parent()) { scope ->
             val descriptors = scope.getContributedVariables(fqName.shortName(), NoLookupLocation.FROM_BACKEND)
-            descriptors.map { st.referenceProperty(it) }
+            descriptors.map { st.descriptorExtension.referenceProperty(it) }
         }
     }
 
@@ -175,5 +179,11 @@ open class IrPluginContextImpl constructor(
         val symbol = linker.resolveBySignatureInModule(signature, kind, moduleDescriptor.name)
         linker.postProcess(inOrAfterLinkageStep = false)
         return symbol
+    }
+
+    private object DummyIrAnnotationsFromPluginRegistrar : IrAnnotationsFromPluginRegistrar() {
+        override fun addMetadataVisibleAnnotationsToElement(declaration: IrDeclaration, annotations: List<IrConstructorCall>) {
+            declaration.annotations += annotations
+        }
     }
 }

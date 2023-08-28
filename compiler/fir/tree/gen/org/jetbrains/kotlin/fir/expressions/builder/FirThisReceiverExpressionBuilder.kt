@@ -3,7 +3,7 @@
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
-@file:Suppress("DuplicatedCode")
+@file:Suppress("DuplicatedCode", "unused")
 
 package org.jetbrains.kotlin.fir.expressions.builder
 
@@ -22,9 +22,8 @@ import org.jetbrains.kotlin.fir.expressions.impl.FirNoReceiverExpression
 import org.jetbrains.kotlin.fir.expressions.impl.FirThisReceiverExpressionImpl
 import org.jetbrains.kotlin.fir.references.FirReference
 import org.jetbrains.kotlin.fir.references.FirThisReference
+import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.FirTypeProjection
-import org.jetbrains.kotlin.fir.types.FirTypeRef
-import org.jetbrains.kotlin.fir.types.impl.FirImplicitTypeRefImplWithoutSource
 import org.jetbrains.kotlin.fir.visitors.*
 
 /*
@@ -34,7 +33,7 @@ import org.jetbrains.kotlin.fir.visitors.*
 
 @FirBuilderDsl
 class FirThisReceiverExpressionBuilder : FirQualifiedAccessExpressionBuilder, FirAnnotationContainerBuilder, FirExpressionBuilder {
-    override var typeRef: FirTypeRef = FirImplicitTypeRefImplWithoutSource
+    override var coneTypeOrNull: ConeKotlinType? = null
     override val annotations: MutableList<FirAnnotation> = mutableListOf()
     override val contextReceiverArguments: MutableList<FirExpression> = mutableListOf()
     override val typeArguments: MutableList<FirTypeProjection> = mutableListOf()
@@ -44,7 +43,7 @@ class FirThisReceiverExpressionBuilder : FirQualifiedAccessExpressionBuilder, Fi
 
     override fun build(): FirThisReceiverExpression {
         return FirThisReceiverExpressionImpl(
-            typeRef,
+            coneTypeOrNull,
             annotations.toMutableOrEmpty(),
             contextReceiverArguments.toMutableOrEmpty(),
             typeArguments.toMutableOrEmpty(),
@@ -83,4 +82,20 @@ inline fun buildThisReceiverExpression(init: FirThisReceiverExpressionBuilder.()
         callsInPlace(init, kotlin.contracts.InvocationKind.EXACTLY_ONCE)
     }
     return FirThisReceiverExpressionBuilder().apply(init).build()
+}
+
+@OptIn(ExperimentalContracts::class)
+inline fun buildThisReceiverExpressionCopy(original: FirThisReceiverExpression, init: FirThisReceiverExpressionBuilder.() -> Unit): FirThisReceiverExpression {
+    contract {
+        callsInPlace(init, kotlin.contracts.InvocationKind.EXACTLY_ONCE)
+    }
+    val copyBuilder = FirThisReceiverExpressionBuilder()
+    copyBuilder.coneTypeOrNull = original.coneTypeOrNull
+    copyBuilder.annotations.addAll(original.annotations)
+    copyBuilder.contextReceiverArguments.addAll(original.contextReceiverArguments)
+    copyBuilder.typeArguments.addAll(original.typeArguments)
+    copyBuilder.source = original.source
+    copyBuilder.calleeReference = original.calleeReference
+    copyBuilder.isImplicit = original.isImplicit
+    return copyBuilder.apply(init).build()
 }

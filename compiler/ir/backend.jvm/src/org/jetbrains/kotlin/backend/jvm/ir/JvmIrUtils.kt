@@ -51,6 +51,7 @@ import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.load.java.JavaDescriptorVisibilities
 import org.jetbrains.kotlin.load.java.JvmAbi
+import org.jetbrains.kotlin.load.kotlin.FacadeClassSource
 import org.jetbrains.kotlin.load.kotlin.JvmPackagePartSource
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil
 import org.jetbrains.kotlin.name.ClassId
@@ -416,13 +417,15 @@ fun findSuperDeclaration(function: IrSimpleFunction, isSuperCall: Boolean, jvmDe
     return current
 }
 
+fun IrMemberAccessExpression<*>.getIntConstArgumentOrNull(i: Int) = getValueArgument(i)?.let {
+    if (it is IrConst<*> && it.kind == IrConstKind.Int)
+        it.value as Int
+    else
+        null
+}
+
 fun IrMemberAccessExpression<*>.getIntConstArgument(i: Int): Int =
-    getValueArgument(i)?.let {
-        if (it is IrConst<*> && it.kind == IrConstKind.Int)
-            it.value as Int
-        else
-            null
-    } ?: throw AssertionError("Value argument #$i should be an Int const: ${dump()}")
+    getIntConstArgumentOrNull(i) ?: throw AssertionError("Value argument #$i should be an Int const: ${dump()}")
 
 fun IrMemberAccessExpression<*>.getStringConstArgument(i: Int): String =
     getValueArgument(i)?.let {
@@ -451,25 +454,15 @@ val IrDeclaration.fileParentOrNull: IrFile?
         else -> null
     }
 
-private val RETENTION_PARAMETER_NAME = Name.identifier("value")
-
-fun IrClass.getAnnotationRetention(): KotlinRetention? {
-    val retentionArgument =
-        getAnnotation(StandardNames.FqNames.retention)?.getValueArgument(RETENTION_PARAMETER_NAME)
-                as? IrGetEnumValue ?: return null
-    val retentionArgumentValue = retentionArgument.symbol.owner
-    return KotlinRetention.valueOf(retentionArgumentValue.name.asString())
-}
-
-// To be generalized to IrMemberAccessExpression as soon as properties get symbols.
-fun IrConstructorCall.getValueArgument(name: Name): IrExpression? {
-    val index = symbol.owner.valueParameters.find { it.name == name }?.index ?: return null
-    return getValueArgument(index)
-}
-
 val IrMemberWithContainerSource.parentClassId: ClassId?
-    get() = ((this as? IrSimpleFunction)?.correspondingPropertySymbol?.owner ?: this).let { directMember ->
-        (directMember.containerSource as? JvmPackagePartSource)?.classId ?: (directMember.parent as? IrClass)?.classId
+    get() {
+        val directMember = (this as? IrSimpleFunction)?.correspondingPropertySymbol?.owner ?: this
+
+        return when (val containerSource = directMember.containerSource) {
+            is JvmPackagePartSource -> containerSource.classId
+            is FacadeClassSource -> ClassId.topLevel(containerSource.className.fqNameForClassNameWithoutDollars)
+            else -> (directMember.parent as? IrClass)?.classId
+        }
     }
 
 // Translated into IR-based terms from classifierDescriptor?.classId
@@ -532,3 +525,30 @@ fun IrFunction.extensionReceiverName(state: GenerationState): String {
 
 fun IrFunction.isBridge(): Boolean =
     origin == IrDeclarationOrigin.BRIDGE || origin == IrDeclarationOrigin.BRIDGE_SPECIAL
+
+// Enum requires external implementation of entries if it's either a Java enum, or a Kotlin enum compiled with pre-1.8 LV/AV.
+fun IrClass.isEnumClassWhichRequiresExternalEntries(): Boolean =
+    isEnumClass && (isFromJava() || !hasEnumEntriesFunction())
+
+private fun IrClass.hasEnumEntriesFunction(): Boolean {
+    // Enums from other modules are always loaded with a property `entries` which has a getter `<get-entries>`.
+    // Enums from the current module will have a property `entries` if they are unlowered yet (i.e. enum is declared in another file
+    // which will be lowered after the file with the call site), or a function `<get-entries>` if they are already lowered.
+    return functions.any { it.isGetEntries() }
+            || (properties.any { it.getter?.isGetEntries() == true } && isInCurrentModule())
+}
+
+private fun IrSimpleFunction.isGetEntries(): Boolean =
+    name.toString() == "<get-entries>"
+            && dispatchReceiverParameter == null
+            && extensionReceiverParameter == null
+            && valueParameters.isEmpty()
+
+fun IrClass.findEnumValuesFunction(context: JvmBackendContext): IrSimpleFunction = functions.single {
+    it.name.toString() == "values"
+            && it.dispatchReceiverParameter == null
+            && it.extensionReceiverParameter == null
+            && it.valueParameters.isEmpty()
+            && it.returnType.isBoxedArray
+            && it.returnType.getArrayElementType(context.irBuiltIns).classOrNull == this.symbol
+}

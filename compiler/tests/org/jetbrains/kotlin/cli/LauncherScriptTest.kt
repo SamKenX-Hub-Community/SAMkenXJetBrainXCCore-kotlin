@@ -56,12 +56,12 @@ class LauncherScriptTest : TestCaseWithTmpdir() {
         val stdout =
             AbstractCliTest.getNormalizedCompilerOutput(
                 StringUtil.convertLineSeparators(process.inputStream.bufferedReader().use { it.readText() }),
-                null, testDataDirectory
+                null, testDataDirectory, tmpdir.absolutePath
             )
         val stderr =
             AbstractCliTest.getNormalizedCompilerOutput(
                 StringUtil.convertLineSeparators(process.errorStream.bufferedReader().use { it.readText() }),
-                null, testDataDirectory
+                null, testDataDirectory, tmpdir.absolutePath
             ).replace("Picked up [_A-Z]+:.*\n".toRegex(), "")
                 .replace("The system cannot find the file specified", "No such file or directory") // win -> unix
         process.waitFor(10, TimeUnit.SECONDS)
@@ -145,9 +145,14 @@ class LauncherScriptTest : TestCaseWithTmpdir() {
             "kotlinc-js",
             "$testDataDirectory/emptyMain.kt",
             "-nowarn",
-            "-Xforce-deprecated-legacy-compiler-usage",
-            "-output",
-            File(tmpdir, "out.js").path,
+            "-libraries",
+            PathUtil.kotlinPathsForCompiler.jsStdLibJarPath.absolutePath,
+            "-Xir-produce-klib-dir",
+            "-Xir-only",
+            "-ir-output-dir",
+            tmpdir.path,
+            "-ir-output-name",
+            "out",
             environment = mapOf("JAVA_HOME" to KtTestUtil.getJdk8Home().absolutePath)
         )
     }
@@ -189,6 +194,18 @@ class LauncherScriptTest : TestCaseWithTmpdir() {
             "a",
             "b",
             expectedStdout = "a, b, 4, 2\n"
+        )
+    }
+
+    fun testRunnerExpressionLanguageVersion20() {
+        runProcess(
+            "kotlin",
+            "-language-version", "2.0", "-e",
+            "println(args.joinToString())",
+            "-a",
+            "b",
+            expectedStdout = "-a, b\n",
+            expectedStderr = "warning: language version 2.0 is experimental, there are no backwards compatibility guarantees for new language and library features\n"
         )
     }
 

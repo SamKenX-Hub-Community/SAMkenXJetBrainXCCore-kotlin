@@ -25,7 +25,7 @@ class IdeNativePlatformDependencyResolverTest {
     fun `test - posix on linux`() {
         val project = buildProjectWithMPP()
         val kotlin = project.multiplatformExtension
-        kotlin.targetHierarchy.default()
+        kotlin.applyDefaultHierarchyTemplate()
         kotlin.linuxX64()
         project.evaluate()
 
@@ -35,8 +35,8 @@ class IdeNativePlatformDependencyResolverTest {
         val linuxX64Test = kotlin.sourceSets.getByName("linuxX64Test")
 
         val dependencies = listOf(
-            binaryCoordinates("org.jetbrains.kotlin.native:posix:${project.konanVersion}:$LINUX_X64"),
-            binaryCoordinates(Regex("""org\.jetbrains\.kotlin\.native:.*:${project.konanVersion}:$LINUX_X64"""))
+            binaryCoordinates("org.jetbrains.kotlin.native:posix:$LINUX_X64:${project.konanVersion}"),
+            binaryCoordinates(Regex("""org\.jetbrains\.kotlin\.native:.*:$LINUX_X64:${project.konanVersion}"""))
         )
 
         IdeNativePlatformDependencyResolver.resolve(commonMain).assertMatches(dependencies)
@@ -50,7 +50,7 @@ class IdeNativePlatformDependencyResolverTest {
         Assume.assumeTrue("Macos host required for this test", HostManager.hostIsMac)
         val project = buildProjectWithMPP()
         val kotlin = project.multiplatformExtension
-        kotlin.targetHierarchy.default()
+        kotlin.applyDefaultHierarchyTemplate()
         kotlin.macosArm64()
         project.evaluate()
 
@@ -60,8 +60,8 @@ class IdeNativePlatformDependencyResolverTest {
         val macosArm64Test = kotlin.sourceSets.getByName("macosArm64Test")
 
         val dependencies = listOf(
-            binaryCoordinates("org.jetbrains.kotlin.native:CoreFoundation:${project.konanVersion}:$MACOS_ARM64"),
-            binaryCoordinates(Regex("""org\.jetbrains\.kotlin\.native:.*:${project.konanVersion}:$MACOS_ARM64"""))
+            binaryCoordinates("org.jetbrains.kotlin.native:CoreFoundation:$MACOS_ARM64:${project.konanVersion}"),
+            binaryCoordinates(Regex("""org\.jetbrains\.kotlin\.native:.*:$MACOS_ARM64:${project.konanVersion}"""))
         )
 
         IdeNativePlatformDependencyResolver.resolve(commonMain).assertMatches(dependencies)

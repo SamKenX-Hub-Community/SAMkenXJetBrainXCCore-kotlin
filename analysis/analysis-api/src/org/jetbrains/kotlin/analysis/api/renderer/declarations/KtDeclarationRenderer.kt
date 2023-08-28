@@ -6,7 +6,7 @@
 package org.jetbrains.kotlin.analysis.api.renderer.declarations
 
 import org.jetbrains.kotlin.analysis.api.KtAnalysisSession
-import org.jetbrains.kotlin.analysis.api.renderer.base.KtKeywordRenderer
+import org.jetbrains.kotlin.analysis.api.renderer.base.KtKeywordsRenderer
 import org.jetbrains.kotlin.analysis.api.renderer.base.annotations.KtAnnotationRenderer
 import org.jetbrains.kotlin.analysis.api.renderer.base.contextReceivers.KtContextReceiversRenderer
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.bodies.*
@@ -27,7 +27,7 @@ import org.jetbrains.kotlin.analysis.utils.printer.PrettyPrinter
 
 public class KtDeclarationRenderer private constructor(
     public val nameRenderer: KtDeclarationNameRenderer,
-    public val keywordRenderer: KtKeywordRenderer,
+    public val keywordsRenderer: KtKeywordsRenderer,
     public val contextReceiversRenderer: KtContextReceiversRenderer,
     public val codeStyle: KtRendererCodeStyle,
     public val typeRenderer: KtTypeRenderer,
@@ -74,6 +74,7 @@ public class KtDeclarationRenderer private constructor(
     public val valueParameterRenderer: KtValueParameterSymbolRenderer,
     public val samConstructorRenderer: KtSamConstructorSymbolRenderer,
     public val propertyAccessorsRenderer: KtPropertyAccessorsRenderer,
+    public val destructuringDeclarationRenderer: KtDestructuringDeclarationRenderer,
 
     public val classInitializerRender: KtClassInitializerRenderer,
     public val classOrObjectRenderer: KtNamedClassOrObjectSymbolRenderer,
@@ -108,6 +109,7 @@ public class KtDeclarationRenderer private constructor(
             is KtTypeParameterSymbol -> singleTypeParameterRenderer.renderSymbol(symbol, printer)
             is KtClassInitializerSymbol -> classInitializerRender.renderClassInitializer(symbol, printer)
             is KtScriptSymbol -> scriptRenderer.renderSymbol(symbol, printer)
+            is KtDestructuringDeclarationSymbol -> destructuringDeclarationRenderer.renderSymbol(symbol, printer)
         }
     }
 
@@ -115,7 +117,7 @@ public class KtDeclarationRenderer private constructor(
         val renderer = this
         return KtDeclarationRenderer {
             this.nameRenderer = renderer.nameRenderer
-            this.keywordRender = renderer.keywordRenderer
+            this.keywordsRenderer = renderer.keywordsRenderer
             this.contextReceiversRenderer = renderer.contextReceiversRenderer
             this.codeStyle = renderer.codeStyle
             this.typeRenderer = renderer.typeRenderer
@@ -161,6 +163,7 @@ public class KtDeclarationRenderer private constructor(
             this.valueParameterRenderer = renderer.valueParameterRenderer
             this.samConstructorRenderer = renderer.samConstructorRenderer
             this.propertyAccessorsRenderer = renderer.propertyAccessorsRenderer
+            this.destructuringDeclarationRenderer = renderer.destructuringDeclarationRenderer
 
             this.classInitializerRender = renderer.classInitializerRender
             this.classOrObjectRenderer = renderer.classOrObjectRenderer
@@ -185,7 +188,7 @@ public class KtDeclarationRenderer private constructor(
         public lateinit var returnTypeFilter: KtCallableReturnTypeFilter
         public lateinit var nameRenderer: KtDeclarationNameRenderer
         public lateinit var contextReceiversRenderer: KtContextReceiversRenderer
-        public lateinit var keywordRender: KtKeywordRenderer
+        public lateinit var keywordsRenderer: KtKeywordsRenderer
         public lateinit var codeStyle: KtRendererCodeStyle
         public lateinit var typeRenderer: KtTypeRenderer
         public lateinit var annotationRenderer: KtAnnotationRenderer
@@ -229,6 +232,7 @@ public class KtDeclarationRenderer private constructor(
         public lateinit var valueParameterRenderer: KtValueParameterSymbolRenderer
         public lateinit var samConstructorRenderer: KtSamConstructorSymbolRenderer
         public lateinit var propertyAccessorsRenderer: KtPropertyAccessorsRenderer
+        public lateinit var destructuringDeclarationRenderer: KtDestructuringDeclarationRenderer
 
         public lateinit var classInitializerRender: KtClassInitializerRenderer
         public lateinit var classOrObjectRenderer: KtNamedClassOrObjectSymbolRenderer
@@ -241,7 +245,7 @@ public class KtDeclarationRenderer private constructor(
 
         public fun build(): KtDeclarationRenderer = KtDeclarationRenderer(
             nameRenderer,
-            keywordRender,
+            keywordsRenderer,
             contextReceiversRenderer,
             codeStyle,
             typeRenderer,
@@ -286,6 +290,7 @@ public class KtDeclarationRenderer private constructor(
             valueParameterRenderer,
             samConstructorRenderer,
             propertyAccessorsRenderer,
+            destructuringDeclarationRenderer,
 
             classInitializerRender,
             classOrObjectRenderer,

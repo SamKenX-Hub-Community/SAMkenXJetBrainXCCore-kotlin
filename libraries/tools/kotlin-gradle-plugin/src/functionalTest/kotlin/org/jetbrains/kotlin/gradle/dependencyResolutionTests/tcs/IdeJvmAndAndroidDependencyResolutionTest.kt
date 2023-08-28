@@ -9,6 +9,9 @@ package org.jetbrains.kotlin.gradle.dependencyResolutionTests.tcs
 
 import org.gradle.api.Project
 import org.jetbrains.kotlin.gradle.dependencyResolutionTests.mavenCentralCacheRedirector
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformSourceSetConventionsImpl.commonMain
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformSourceSetConventionsImpl.commonTest
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformSourceSetConventionsImpl.dependencies
 import org.jetbrains.kotlin.gradle.dsl.multiplatformExtension
 import org.jetbrains.kotlin.gradle.idea.tcs.IdeaKotlinResolvedBinaryDependency
 import org.jetbrains.kotlin.gradle.idea.testFixtures.tcs.*
@@ -37,7 +40,7 @@ class IdeJvmAndAndroidDependencyResolutionTest {
         if (enableDefaultStdlib) repositories.mavenLocal()
         repositories.mavenCentralCacheRedirector()
 
-        project.multiplatformExtension.targetHierarchy.custom {
+        project.multiplatformExtension.applyHierarchyTemplate {
             common {
                 group("jvmAndAndroid") {
                     withJvm()
@@ -118,11 +121,11 @@ class IdeJvmAndAndroidDependencyResolutionTest {
         val a = buildProject({ withParent(root).withName("a") }) { configureAndroidAndMultiplatform() }
         val b = buildProject({ withParent(root).withName("b") }) { configureAndroidAndMultiplatform() }
 
-        b.multiplatformExtension.commonMain.dependencies {
+        b.multiplatformExtension.sourceSets.commonMain.dependencies {
             api(project(":a"))
         }
 
-        a.multiplatformExtension.commonTest.dependencies {
+        a.multiplatformExtension.sourceSets.commonTest.dependencies {
             api(project(":b"))
         }
 
@@ -147,8 +150,6 @@ class IdeJvmAndAndroidDependencyResolutionTest {
         val stdlibVersion = project.getKotlinPluginVersion()
         val stdlibDependencies = listOf(
             binaryCoordinates("org.jetbrains.kotlin:kotlin-stdlib:${stdlibVersion}"),
-            binaryCoordinates("org.jetbrains.kotlin:kotlin-stdlib-jdk7:${stdlibVersion}"),
-            binaryCoordinates("org.jetbrains.kotlin:kotlin-stdlib-jdk8:${stdlibVersion}"),
             binaryCoordinates("org.jetbrains:annotations:13.0"),
         )
 
@@ -163,18 +164,17 @@ class IdeJvmAndAndroidDependencyResolutionTest {
         val project = buildProject { configureAndroidAndMultiplatform(enableDefaultStdlib = true) }
         val kotlin = project.multiplatformExtension
         kotlin.sourceSets.getByName("commonMain").dependencies {
-            implementation("com.arkivanov.mvikotlin:mvikotlin:3.0.2")
+            implementation("com.arkivanov.mvikotlin:mvikotlin:3.2.1")
         }
 
         project.evaluate()
 
         val kgpVersion = project.getKotlinPluginVersion()
         val jvmAndAndroidDependencies = listOf(
-            binaryCoordinates("com.arkivanov.mvikotlin:mvikotlin-jvm:3.0.2"),
-            binaryCoordinates("com.arkivanov.essenty:lifecycle-jvm:0.4.2"),
-            binaryCoordinates("com.arkivanov.essenty:instance-keeper-jvm:0.4.2"),
-            binaryCoordinates("org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kgpVersion"), // uplifted to plugin version
-            binaryCoordinates("org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kgpVersion"),
+            binaryCoordinates("com.arkivanov.mvikotlin:mvikotlin-jvm:3.2.1"),
+            binaryCoordinates("com.arkivanov.essenty:lifecycle-jvm:1.0.0"),
+            binaryCoordinates("com.arkivanov.essenty:instance-keeper-jvm:1.0.0"),
+            legacyStdlibJdkDependencies(),
             binaryCoordinates("org.jetbrains.kotlin:kotlin-stdlib:$kgpVersion"),
             binaryCoordinates("org.jetbrains:annotations:13.0"),
         )

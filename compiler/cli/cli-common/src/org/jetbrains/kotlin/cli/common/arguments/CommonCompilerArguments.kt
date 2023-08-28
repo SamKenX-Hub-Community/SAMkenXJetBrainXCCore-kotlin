@@ -534,7 +534,7 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
 
     @Argument(
         value = "-Xuse-fir-lt",
-        description = "Compile using LightTree parser with Front-end IR. Warning: this feature is far from being production-ready"
+        description = "Compile using LightTree parser with Front-end IR"
     )
     var useFirLT = true
         set(value) {
@@ -763,6 +763,16 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
             field = value
         }
 
+    @Argument(
+        value = "-Xdont-warn-on-error-suppression",
+        description = "Don't report a warning when an error is suppressed. Only affects K2."
+    )
+    var dontWarnOnErrorSuppression = false
+        set(value) {
+            checkFrozen()
+            field = value
+        }
+
     @OptIn(IDEAPluginsCompatibilityAPI::class)
     open fun configureAnalysisFlags(collector: MessageCollector, languageVersion: LanguageVersion): MutableMap<AnalysisFlag<*>, Any> {
         return HashMap<AnalysisFlag<*>, Any>().apply {
@@ -787,6 +797,7 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
             put(AnalysisFlags.allowKotlinPackage, allowKotlinPackage)
             put(AnalysisFlags.builtInsFromSources, builtInsFromSources)
             put(AnalysisFlags.allowFullyQualifiedNameInKClass, true)
+            put(AnalysisFlags.dontWarnOnErrorSuppression, dontWarnOnErrorSuppression)
         }
     }
 

@@ -38,6 +38,7 @@ dependencies {
     embedded(project(":kotlin-scripting-common")) { isTransitive = false }
     embedded(project(":kotlin-scripting-jvm")) { isTransitive = false }
     embedded(project(":kotlin-scripting-jvm-host-unshaded")) { isTransitive = false }
+    embedded(project(":kotlin-scripting-dependencies")) { isTransitive = false }
     embedded(project(":kotlin-scripting-dependencies-maven-all")) { isTransitive = false }
     embedded("org.slf4j:slf4j-api:1.7.36")
     embedded("org.slf4j:slf4j-simple:1.7.36")
@@ -98,17 +99,17 @@ val proguard by task<CacheableProguardTask> {
                     "jre/lib/rt.jar",
                     "../Classes/classes.jar",
                     jdkHome = it.metadata.installationPath.asFile
-                )
+                )!!
             },
             javaLauncher.map {
                 firstFromJavaHomeThatExists(
                     "jre/lib/jsse.jar",
                     "../Classes/jsse.jar",
                     jdkHome = it.metadata.installationPath.asFile
-                )
+                )!!
             },
             javaLauncher.map {
-                Jvm.forHome(it.metadata.installationPath.asFile).toolsJar
+                Jvm.forHome(it.metadata.installationPath.asFile).toolsJar!!
             }
         )
     )

@@ -73,7 +73,6 @@ class ConfigurationAvoidanceIT : KGPBaseTest() {
 
     @AndroidGradlePluginTests
     @DisplayName("Android unrelated tasks are not configured")
-    @AndroidTestVersions(minVersion = TestVersions.AGP.AGP_42)
     @GradleAndroidTest
     fun testAndroidUnrelatedTaskNotConfigured(
         gradleVersion: GradleVersion,
@@ -87,6 +86,7 @@ class ConfigurationAvoidanceIT : KGPBaseTest() {
             buildJdk = providedJdk.location
         ) {
 
+            gradleProperties.appendText("android.defaults.buildfeatures.aidl=true")
             listOf("Android", "Test").forEach { subproject ->
                 subProject(subproject)
                     .buildGradle

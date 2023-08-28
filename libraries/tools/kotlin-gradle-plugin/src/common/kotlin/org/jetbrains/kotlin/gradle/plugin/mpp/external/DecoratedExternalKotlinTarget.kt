@@ -8,7 +8,7 @@ package org.jetbrains.kotlin.gradle.plugin.mpp.external
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.logging.Logger
 import org.jetbrains.kotlin.gradle.ExternalKotlinTargetApi
-import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import org.jetbrains.kotlin.gradle.dsl.*
 import org.jetbrains.kotlin.gradle.dsl.multiplatformExtension
 import org.jetbrains.kotlin.gradle.dsl.multiplatformExtensionOrNull
 import org.jetbrains.kotlin.gradle.plugin.KotlinTarget
@@ -30,6 +30,19 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.InternalKotlinTarget
  *     // Covariant override that allows for narrowing the type of compilations that this target contains
  *     override val compilations: NamedDomainObjectContainer<MyCustomCompilationType>
  *         get() = super.compilations as NamedDomainObjectContainer<MyCustomCompilationType>
+ *
+ *     // Covariant override of target compiler options that should be used to configure all target compilation compiler options
+ *     override val compilerOptions: KotlinJvmCompilerOptions
+ *         get() = super.compilerOptions as KotlinJvmCompilerOptions
+ *
+ *     // Optionally follow api exposed in Kotlin built-in targets to configure compiler options
+ *     fun compilerOptions(configure: KotlinJvmCompilerOptions.() -> Unit) {
+ *         configure(compilerOptions)
+ *     }
+ *
+ *     fun compilerOptions(configure: Action<KotlinJvmCompilerOptions>) {
+ *         configure.execute(compilerOptions)
+ *     }
  * }
  * ```
  *
@@ -40,7 +53,7 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.InternalKotlinTarget
  */
 @ExternalKotlinTargetApi
 open class DecoratedExternalKotlinTarget internal constructor(
-    internal val delegate: ExternalKotlinTargetImpl
+    internal val delegate: ExternalKotlinTargetImpl,
 ) : InternalKotlinTarget by delegate {
     constructor(delegate: Delegate) : this(delegate.impl)
 
@@ -50,9 +63,19 @@ open class DecoratedExternalKotlinTarget internal constructor(
 
     val runtimeElementsConfiguration: Configuration = delegate.runtimeElementsConfiguration
 
+    /**
+     * @since 1.9.20
+     */
+    val sourcesElementsConfiguration: Configuration = delegate.sourcesElementsConfiguration
+
     val apiElementsPublishedConfiguration: Configuration = delegate.apiElementsPublishedConfiguration
 
     val runtimeElementsPublishedConfiguration: Configuration = delegate.runtimeElementsPublishedConfiguration
+
+    /**
+     * @since 1.9.20
+     */
+    val sourcesElementsPublishedConfiguration: Configuration = delegate.sourcesElementsPublishedConfiguration
 
     internal val logger: Logger = delegate.logger
 }

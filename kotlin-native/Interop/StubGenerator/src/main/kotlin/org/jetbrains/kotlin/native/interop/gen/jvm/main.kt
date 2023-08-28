@@ -31,6 +31,7 @@ import org.jetbrains.kotlin.konan.target.KonanTarget
 import org.jetbrains.kotlin.konan.util.DefFile
 import org.jetbrains.kotlin.konan.util.KonanHomeProvider
 import org.jetbrains.kotlin.konan.util.usingNativeMemoryAllocator
+import org.jetbrains.kotlin.library.KLIB_PROPERTY_IR_PROVIDER
 import org.jetbrains.kotlin.library.KotlinLibrary
 import org.jetbrains.kotlin.library.metadata.resolver.TopologicalLibraryOrder
 import org.jetbrains.kotlin.library.metadata.resolver.impl.KotlinLibraryResolverImpl
@@ -258,7 +259,7 @@ private fun processCLib(
         cinteropArguments.argParser.printError("-def or -pkg should be provided!")
     }
 
-    val tool = prepareTool(cinteropArguments.target, flavor, runFromDaemon, parseKeyValuePairs(cinteropArguments.overrideKonanProperties))
+    val tool = prepareTool(cinteropArguments.target, flavor, runFromDaemon, parseKeyValuePairs(cinteropArguments.overrideKonanProperties), konanDataDir = cinteropArguments.konanDataDir)
 
     val def = DefFile(defFile, tool.substitutions)
     val isLinkerOptsSetByUser = (cinteropArguments.linkerOpts.valueOrigin == ArgParser.ValueOrigin.SET_BY_USER) ||
@@ -289,17 +290,6 @@ private fun processCLib(
             ?: defFile!!.name.split('.').reversed().drop(1)
 
     val outKtPkg = fqParts.joinToString(".")
-
-    val mode = run {
-        val providedMode = cinteropArguments.mode
-
-        if (providedMode == GenerationMode.METADATA && flavor == KotlinPlatform.JVM) {
-            warn("Metadata mode isn't supported for Kotlin/JVM! Falling back to sourcecode.")
-            GenerationMode.SOURCE_CODE
-        } else {
-            providedMode
-        }
-    }
 
     val resolver = getLibraryResolver(cinteropArguments, tool.target)
 
@@ -336,6 +326,7 @@ private fun processCLib(
             noStringConversion = def.config.noStringConversion.toSet(),
             exportForwardDeclarations = def.config.exportForwardDeclarations,
             disableDesignatedInitializerChecks = def.config.disableDesignatedInitializerChecks,
+            disableExperimentalAnnotation = cinteropArguments.disableExperimentalAnnotation ?: false,
             target = target
     )
 
@@ -348,7 +339,10 @@ private fun processCLib(
     } else {
         {}
     }
-
+    val mode = when (flavor) {
+        KotlinPlatform.JVM -> GenerationMode.SOURCE_CODE
+        KotlinPlatform.NATIVE -> GenerationMode.METADATA
+    }
     val stubIrContext = StubIrContext(logger, configuration, nativeIndex, imports, flavor, mode, libName, plugin)
     val stubIrOutput = run {
         val outKtFileCreator = {
@@ -378,7 +372,7 @@ private fun processCLib(
     }
     def.manifestAddendProperties["interop"] = "true"
     if (stubIrOutput is StubIrDriver.Result.Metadata) {
-        def.manifestAddendProperties["ir_provider"] = KLIB_INTEROP_IR_PROVIDER_IDENTIFIER
+        def.manifestAddendProperties[KLIB_PROPERTY_IR_PROVIDER] = KLIB_INTEROP_IR_PROVIDER_IDENTIFIER
     }
     stubIrContext.addManifestProperties(def.manifestAddendProperties)
     // cinterop command line option overrides def file property
@@ -487,7 +481,7 @@ private fun getLibraryResolver(
             repos,
             libraries.filter { it.contains(org.jetbrains.kotlin.konan.file.File.separator) },
             target,
-            Distribution(KonanHomeProvider.determineKonanHome())
+            Distribution(KonanHomeProvider.determineKonanHome(), konanDataDir = cinteropArguments.konanDataDir)
     ).libraryResolver()
 }
 
@@ -505,8 +499,8 @@ private fun resolveDependencies(
     ).getFullList(TopologicalLibraryOrder)
 }
 
-internal fun prepareTool(target: String?, flavor: KotlinPlatform, runFromDaemon: Boolean, propertyOverrides: Map<String, String> = emptyMap()) =
-        ToolConfig(target, flavor, propertyOverrides).also {
+internal fun prepareTool(target: String?, flavor: KotlinPlatform, runFromDaemon: Boolean, propertyOverrides: Map<String, String> = emptyMap(), konanDataDir: String? = null) =
+        ToolConfig(target, flavor, propertyOverrides, konanDataDir).also {
             if (!runFromDaemon) it.prepare() // Daemon prepares the tool himself. (See KonanToolRunner.kt)
         }
 

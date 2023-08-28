@@ -19,7 +19,10 @@ import org.jetbrains.kotlin.ir.interpreter.intrinsics.IntrinsicEvaluator
 import org.jetbrains.kotlin.ir.interpreter.proxy.wrap
 import org.jetbrains.kotlin.ir.interpreter.stack.CallStack
 import org.jetbrains.kotlin.ir.interpreter.state.*
-import org.jetbrains.kotlin.ir.types.*
+import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.classOrNull
+import org.jetbrains.kotlin.ir.types.isArray
+import org.jetbrains.kotlin.ir.types.isUnsignedType
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.name.FqName
@@ -89,9 +92,10 @@ internal class DefaultCallInterceptor(override val interpreter: IrInterpreter) :
                 verify(handleIntrinsicMethods(irConstructor)) { "Unsupported intrinsic constructor: ${irConstructor.render()}" }
             }
             irClass.defaultType.isUnsignedType() -> {
-                // Check for type is a hack needed for Native;
-                // in UInt, for example, we may have (after lowerings, I guess) additional property "$companion".
-                val propertySymbol = irClass.declarations.single { it is IrProperty && it.getter?.returnType?.isPrimitiveType() == true }.symbol
+                val propertyName = irClass.inlineClassRepresentation?.underlyingPropertyName
+                val propertySymbol = irClass.declarations.filterIsInstance<IrProperty>()
+                    .single { it.name == propertyName && it.getter?.extensionReceiverParameter == null }
+                    .symbol
                 callStack.pushState(receiver.apply { this.setField(propertySymbol, args.single()) })
             }
             else -> defaultAction()
@@ -149,9 +153,9 @@ internal class DefaultCallInterceptor(override val interpreter: IrInterpreter) :
     private data class Arg(var type: String, var value: Any?)
 
     private fun calculateBuiltIns(irFunction: IrFunction, args: List<State>) {
-        val methodName = when (val property = irFunction.property?.symbol) {
+        val methodName = when (val property = irFunction.property) {
             null -> irFunction.name.asString()
-            else -> property.owner.name.asString()
+            else -> property.name.asString()
         }
 
         val receiverType = irFunction.dispatchReceiverParameter?.type ?: irFunction.extensionReceiverParameter?.type
@@ -170,10 +174,16 @@ internal class DefaultCallInterceptor(override val interpreter: IrInterpreter) :
         if (environment.configuration.platform.isJs()) {
             if (signature.name == "toString") return signature.args[0].value.specialToStringForJs()
             if (signature.name == "toFloat") signature.name = "toDouble"
-            signature.args.filter { it.type == "kotlin.Float" }.forEach {
-                it.type = "kotlin.Double"
-                it.value = it.value.toString().toDouble()
-            }
+            signature.args
+                .filter { it.value is Float || it.type == "kotlin.Float" || it.type == "kotlin.Float?" }
+                .forEach {
+                    it.type = when (it.type) {
+                        "kotlin.Float" -> "kotlin.Double"
+                        "kotlin.Float?" -> "kotlin.Double?"
+                        else -> it.type
+                    }
+                    it.value = it.value.toString().toDouble()
+                }
         }
 
         val name = signature.name

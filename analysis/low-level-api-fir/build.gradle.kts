@@ -21,6 +21,7 @@ dependencies {
     api(project(":analysis:analysis-api-impl-barebone"))
     api(project(":js:js.config"))
     api(project(":compiler:cli-common"))
+    implementation(project(":analysis:decompiled:decompiler-to-psi"))
     testImplementation(project(":analysis:analysis-api-fir"))
     implementation(project(":compiler:frontend.common"))
     implementation(project(":compiler:fir:entrypoint"))
@@ -65,6 +66,12 @@ sourceSets {
     "test" { projectDefault() }
 }
 
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.add("-Xcontext-receivers")
+    }
+}
+
 projectTest(jUnitMode = JUnitMode.JUnit5) {
     dependsOn(":dist")
     workingDir = rootDir
@@ -76,6 +83,7 @@ allprojects {
         kotlinOptions {
             freeCompilerArgs += "-opt-in=org.jetbrains.kotlin.fir.symbols.SymbolInternals"
             freeCompilerArgs += "-opt-in=org.jetbrains.kotlin.analysis.low.level.api.fir.LLFirInternals"
+            freeCompilerArgs += "-opt-in=org.jetbrains.kotlin.analysis.api.KtAnalysisApiInternals"
         }
     }
 }

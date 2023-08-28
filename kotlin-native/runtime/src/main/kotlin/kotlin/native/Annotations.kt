@@ -5,6 +5,7 @@
 
 package kotlin.native
 
+import kotlin.experimental.ExperimentalNativeApi
 import kotlin.experimental.ExperimentalObjCName
 import kotlin.experimental.ExperimentalObjCRefinement
 import kotlin.reflect.KClass
@@ -40,16 +41,14 @@ public annotation class SymbolName(val name: String)
  */
 @Target(AnnotationTarget.FUNCTION, AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.BINARY)
-@Deprecated("This annotation will be removed in a future release")
-public annotation class Retain
+internal annotation class Retain
 
 /**
  * Preserve the function entry point during global optimizations, only for the given target.
  */
 @Target(AnnotationTarget.FUNCTION, AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.BINARY)
-@Deprecated("This annotation will be removed in a future release")
-public annotation class RetainForTarget(val target: String)
+internal annotation class RetainForTarget(val target: String)
 
 
 /** @suppress */
@@ -62,6 +61,9 @@ public typealias Throws = kotlin.Throws
 public typealias ThreadLocal = kotlin.native.concurrent.ThreadLocal
 
 /** @suppress */
+@Suppress("DEPRECATION")
+@Deprecated("This annotation is redundant and has no effect")
+@DeprecatedSinceKotlin(warningSince = "1.9")
 // Not @FreezingIsDeprecated: Lots of usages. Usages will trigger INFO reports in the frontend.
 public typealias SharedImmutable = kotlin.native.concurrent.SharedImmutable
 
@@ -85,6 +87,7 @@ public annotation class EagerInitialization
  * [externName] controls the name of top level function, [shortName] controls the short name.
  * If [externName] is empty, no top level declaration is being created.
  */
+@ExperimentalNativeApi
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.BINARY)
 public actual annotation class CName(actual val externName: String = "", actual val shortName: String = "")

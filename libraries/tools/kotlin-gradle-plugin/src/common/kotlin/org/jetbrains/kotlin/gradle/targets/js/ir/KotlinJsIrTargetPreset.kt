@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.gradle.targets.js.ir
 
 import org.gradle.api.Project
+import org.jetbrains.kotlin.gradle.DeprecatedTargetPresetApi
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinCompilationFactory
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinOnlyTarget
@@ -16,6 +17,7 @@ import org.jetbrains.kotlin.gradle.utils.runProjectConfigurationHealthCheckWhenE
 import org.jetbrains.kotlin.statistics.metrics.StringMetrics
 import org.jetbrains.kotlin.util.capitalizeDecapitalize.decapitalizeAsciiOnly
 
+@DeprecatedTargetPresetApi
 open class KotlinJsIrTargetPreset(
     project: Project
 ) : KotlinOnlyTargetPreset<KotlinJsIrTarget, KotlinJsIrCompilation>(
@@ -33,21 +35,6 @@ open class KotlinJsIrTargetPreset(
             this.isMpp = this@KotlinJsIrTargetPreset.isMpp
             if (!mixedMode) {
                 project.runProjectConfigurationHealthCheckWhenEvaluated {
-                    if (!isBrowserConfigured && !isNodejsConfigured) {
-                        project.logger.warn(
-                            """
-                                Please choose a JavaScript environment to build distributions and run tests.
-                                Not choosing any of them will be an error in the future releases.
-                                kotlin {
-                                    js {
-                                        // To build distributions for and run tests on browser or Node.js use one or both of:
-                                        browser()
-                                        nodejs()
-                                    }
-                                }
-                            """.trimIndent()
-                        )
-                    }
                     val buildStatsService = KotlinBuildStatsService.getInstance()
                     when {
                         isBrowserConfigured && isNodejsConfigured -> buildStatsService?.report(StringMetrics.JS_TARGET_MODE, "both")
@@ -80,6 +67,7 @@ open class KotlinJsIrTargetPreset(
     }
 }
 
+@DeprecatedTargetPresetApi
 class KotlinJsIrSingleTargetPreset(
     project: Project
 ) : KotlinJsIrTargetPreset(

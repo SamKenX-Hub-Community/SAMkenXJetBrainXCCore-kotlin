@@ -311,6 +311,12 @@ public class Fe10IdeNormalAnalysisSourceModuleReferenceResolveTestGenerated exte
     }
 
     @Test
+    @TestMetadata("InOperator.kt")
+    public void testInOperator() throws Exception {
+        runTest("analysis/analysis-api/testData/referenceResolve/InOperator.kt");
+    }
+
+    @Test
     @TestMetadata("InVaragReferenceInFunctionBody.kt")
     public void testInVaragReferenceInFunctionBody() throws Exception {
         runTest("analysis/analysis-api/testData/referenceResolve/InVaragReferenceInFunctionBody.kt");
@@ -371,6 +377,12 @@ public class Fe10IdeNormalAnalysisSourceModuleReferenceResolveTestGenerated exte
     }
 
     @Test
+    @TestMetadata("LabelsReturn.kt")
+    public void testLabelsReturn() throws Exception {
+        runTest("analysis/analysis-api/testData/referenceResolve/LabelsReturn.kt");
+    }
+
+    @Test
     @TestMetadata("MultiDeclarationExtension.kt")
     public void testMultiDeclarationExtension() throws Exception {
         runTest("analysis/analysis-api/testData/referenceResolve/MultiDeclarationExtension.kt");
@@ -392,6 +404,12 @@ public class Fe10IdeNormalAnalysisSourceModuleReferenceResolveTestGenerated exte
     @TestMetadata("NotEqualsOperator.kt")
     public void testNotEqualsOperator() throws Exception {
         runTest("analysis/analysis-api/testData/referenceResolve/NotEqualsOperator.kt");
+    }
+
+    @Test
+    @TestMetadata("NotInOperator.kt")
+    public void testNotInOperator() throws Exception {
+        runTest("analysis/analysis-api/testData/referenceResolve/NotInOperator.kt");
     }
 
     @Test
@@ -1272,6 +1290,52 @@ public class Fe10IdeNormalAnalysisSourceModuleReferenceResolveTestGenerated exte
         }
 
         @Nested
+        @TestMetadata("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations")
+        @TestDataPath("$PROJECT_ROOT")
+        public class JavaDeclarations {
+            @Test
+            public void testAllFilesPresentInJavaDeclarations() throws Exception {
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
+            }
+
+            @Test
+            @TestMetadata("StaticFieldQualified.kt")
+            public void testStaticFieldQualified() throws Exception {
+                runTest("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations/StaticFieldQualified.kt");
+            }
+
+            @Test
+            @TestMetadata("StaticFunctionFromBaseClass.kt")
+            public void testStaticFunctionFromBaseClass() throws Exception {
+                runTest("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations/StaticFunctionFromBaseClass.kt");
+            }
+
+            @Test
+            @TestMetadata("StaticFunctionFullyQualified.kt")
+            public void testStaticFunctionFullyQualified() throws Exception {
+                runTest("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations/StaticFunctionFullyQualified.kt");
+            }
+
+            @Test
+            @TestMetadata("StaticFunctionQualified.kt")
+            public void testStaticFunctionQualified() throws Exception {
+                runTest("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations/StaticFunctionQualified.kt");
+            }
+
+            @Test
+            @TestMetadata("StaticFunctionQualifiedWithJavaSubclass.kt")
+            public void testStaticFunctionQualifiedWithJavaSubclass() throws Exception {
+                runTest("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations/StaticFunctionQualifiedWithJavaSubclass.kt");
+            }
+
+            @Test
+            @TestMetadata("StaticFunctionQualifiedWithKotlinSubclass.kt")
+            public void testStaticFunctionQualifiedWithKotlinSubclass() throws Exception {
+                runTest("analysis/analysis-api/testData/referenceResolve/kDoc/javaDeclarations/StaticFunctionQualifiedWithKotlinSubclass.kt");
+            }
+        }
+
+        @Nested
         @TestMetadata("analysis/analysis-api/testData/referenceResolve/kDoc/localContext")
         @TestDataPath("$PROJECT_ROOT")
         public class LocalContext {
@@ -1942,6 +2006,12 @@ public class Fe10IdeNormalAnalysisSourceModuleReferenceResolveTestGenerated exte
         }
 
         @Test
+        @TestMetadata("reifiedTypeParameterInBody.kt")
+        public void testReifiedTypeParameterInBody() throws Exception {
+            runTest("analysis/analysis-api/testData/referenceResolve/typeParameter/reifiedTypeParameterInBody.kt");
+        }
+
+        @Test
         @TestMetadata("reified_argumentInFunctionalType.kt")
         public void testReified_argumentInFunctionalType() throws Exception {
             runTest("analysis/analysis-api/testData/referenceResolve/typeParameter/reified_argumentInFunctionalType.kt");
@@ -2012,6 +2082,12 @@ public class Fe10IdeNormalAnalysisSourceModuleReferenceResolveTestGenerated exte
         }
 
         @Test
+        @TestMetadata("BuiltInImportsNoRuntime.kt")
+        public void testBuiltInImportsNoRuntime() throws Exception {
+            runTest("analysis/analysis-api/testData/referenceResolve/withErrors/BuiltInImportsNoRuntime.kt");
+        }
+
+        @Test
         @TestMetadata("ByReturnExpression.kt")
         public void testByReturnExpression() throws Exception {
             runTest("analysis/analysis-api/testData/referenceResolve/withErrors/ByReturnExpression.kt");
@@ -2021,6 +2097,12 @@ public class Fe10IdeNormalAnalysisSourceModuleReferenceResolveTestGenerated exte
         @TestMetadata("ClassNameBeforeDot.kt")
         public void testClassNameBeforeDot() throws Exception {
             runTest("analysis/analysis-api/testData/referenceResolve/withErrors/ClassNameBeforeDot.kt");
+        }
+
+        @Test
+        @TestMetadata("ClassReferenceInIncorrectWhenClause.kt")
+        public void testClassReferenceInIncorrectWhenClause() throws Exception {
+            runTest("analysis/analysis-api/testData/referenceResolve/withErrors/ClassReferenceInIncorrectWhenClause.kt");
         }
 
         @Test
@@ -2135,6 +2217,12 @@ public class Fe10IdeNormalAnalysisSourceModuleReferenceResolveTestGenerated exte
         @TestMetadata("TopLevelClassVsLocalClassQualifier.kt")
         public void testTopLevelClassVsLocalClassQualifier() throws Exception {
             runTest("analysis/analysis-api/testData/referenceResolve/withErrors/TopLevelClassVsLocalClassQualifier.kt");
+        }
+
+        @Test
+        @TestMetadata("TopLevelDestructingDeclaration.kt")
+        public void testTopLevelDestructingDeclaration() throws Exception {
+            runTest("analysis/analysis-api/testData/referenceResolve/withErrors/TopLevelDestructingDeclaration.kt");
         }
 
         @Test

@@ -58,8 +58,11 @@ Util functions
  *
  * If the lifecycle already finished and Gradle moved to its execution phase, then the block will be invoked right away.
  */
-internal fun Project.launch(block: suspend KotlinPluginLifecycle.() -> Unit) {
-    kotlinPluginLifecycle.launch(block)
+internal fun Project.launch(
+    start: CoroutineStart = CoroutineStart.Default,
+    block: suspend KotlinPluginLifecycle.() -> Unit,
+) {
+    kotlinPluginLifecycle.launch(start, block)
 }
 
 /**
@@ -188,11 +191,23 @@ internal suspend fun <T : Any> Property<T>.awaitFinalValue(): T? {
 }
 
 /**
+ * Will suspend until [Stage.FinaliseDsl], finalise the value using [Property.finalizeValue] and return the
+ * final value or throw if value wasn't set.
+ */
+internal suspend fun <T : Any> Property<T>.awaitFinalValueOrThrow(): T {
+    Stage.AfterFinaliseDsl.await()
+    finalizeValue()
+    return orNull ?: throw IllegalLifecycleException("Property has no value available: ${currentKotlinPluginLifecycle()}")
+}
+
+/**
  * See also [withRestrictedStages]
  *
  * Will ensure that the given [block] can only execute in the given [stage]
+ * Will wait for the given [stage] if not arrived yet
  */
 internal suspend fun <T> requiredStage(stage: Stage, block: suspend () -> T): T {
+    if (currentKotlinPluginLifecycle().stage < stage) stage.await()
     return withRestrictedStages(hashSetOf(stage), block)
 }
 
@@ -287,6 +302,18 @@ internal interface KotlinPluginLifecycle {
         }
     }
 
+    enum class CoroutineStart {
+        /**
+         * Puts a coroutine at the end of the current execution queue
+         */
+        Default,
+
+        /**
+         * Immediately executes the coroutine until its first suspension point in the current thread
+         */
+        Undispatched
+    }
+
     sealed class ProjectConfigurationResult {
         object Success : ProjectConfigurationResult()
         data class Failure(val failures: List<Throwable>) : ProjectConfigurationResult()
@@ -296,7 +323,14 @@ internal interface KotlinPluginLifecycle {
 
     val stage: Stage
 
-    fun launch(block: suspend KotlinPluginLifecycle.() -> Unit)
+    val isStarted: Boolean
+
+    val isFinished: Boolean
+
+    fun launch(
+        start: CoroutineStart = CoroutineStart.Default,
+        block: suspend KotlinPluginLifecycle.() -> Unit,
+    )
 
     suspend fun await(stage: Stage)
 

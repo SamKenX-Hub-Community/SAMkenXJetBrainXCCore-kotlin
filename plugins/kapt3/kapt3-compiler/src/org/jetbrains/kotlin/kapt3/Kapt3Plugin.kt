@@ -21,13 +21,13 @@ import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.analyzer.AnalysisResult
 import org.jetbrains.kotlin.base.kapt3.*
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.cli.common.messages.PrintingMessageCollector
 import org.jetbrains.kotlin.cli.jvm.config.JavaSourceRoot
 import org.jetbrains.kotlin.cli.jvm.config.JvmClasspathRoot
 import org.jetbrains.kotlin.compiler.plugin.*
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
+import org.jetbrains.kotlin.config.CommonConfigurationKeys.USE_FIR
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.CompilerConfigurationKey
 import org.jetbrains.kotlin.config.JVMConfigurationKeys
@@ -35,28 +35,31 @@ import org.jetbrains.kotlin.container.ComponentProvider
 import org.jetbrains.kotlin.container.StorageComponentContainer
 import org.jetbrains.kotlin.container.useInstance
 import org.jetbrains.kotlin.context.ProjectContext
+import org.jetbrains.kotlin.descriptors.DeclarationDescriptorWithVisibility
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.extensions.StorageComponentContainerContributor
 import org.jetbrains.kotlin.kapt.cli.KaptCliOption
-import org.jetbrains.kotlin.kapt.cli.KaptCliOption.Companion.ANNOTATION_PROCESSING_COMPILER_PLUGIN_ID
 import org.jetbrains.kotlin.kapt.cli.KaptCliOption.*
+import org.jetbrains.kotlin.kapt.cli.KaptCliOption.Companion.ANNOTATION_PROCESSING_COMPILER_PLUGIN_ID
 import org.jetbrains.kotlin.kapt3.base.Kapt
 import org.jetbrains.kotlin.kapt3.base.util.KaptLogger
 import org.jetbrains.kotlin.kapt3.util.MessageCollectorBackedKaptLogger
 import org.jetbrains.kotlin.kapt3.util.doOpenInternalPackagesIfRequired
-import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.platform.TargetPlatform
 import org.jetbrains.kotlin.platform.jvm.isJvm
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.resolve.BindingTrace
+import org.jetbrains.kotlin.resolve.jvm.ReplaceWithSupertypeAnonymousTypeTransformer
 import org.jetbrains.kotlin.resolve.jvm.extensions.AnalysisHandlerExtension
 import org.jetbrains.kotlin.resolve.jvm.extensions.PartialAnalysisHandlerExtension
+import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.utils.decodePluginOptions
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.ObjectInputStream
 import java.util.*
 
-private val KAPT_OPTIONS = CompilerConfigurationKey.create<KaptOptions.Builder>("Kapt options")
+val KAPT_OPTIONS = CompilerConfigurationKey.create<KaptOptions.Builder>("Kapt options")
 
 class Kapt3CommandLineProcessor : CommandLineProcessor {
     override val pluginId: String = ANNOTATION_PROCESSING_COMPILER_PLUGIN_ID
@@ -67,12 +70,6 @@ class Kapt3CommandLineProcessor : CommandLineProcessor {
         doOpenInternalPackagesIfRequired()
         if (option !is KaptCliOption) {
             throw CliOptionProcessingException("Unknown option: ${option.optionName}")
-        }
-        if (configuration.getBoolean(CommonConfigurationKeys.USE_FIR)) {
-            configuration[CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY]?.report(
-                CompilerMessageSeverity.ERROR,
-                "kapt currently doesn't support language version 2.0\nPlease use language version 1.9 or below"
-            )
         }
 
         val kaptOptions = configuration[KAPT_OPTIONS]
@@ -131,6 +128,7 @@ class Kapt3CommandLineProcessor : CommandLineProcessor {
 
             SHOW_PROCESSOR_STATS -> setFlag(KaptFlag.SHOW_PROCESSOR_STATS, value)
             DUMP_PROCESSOR_STATS -> processorsStatsReportFile = File(value)
+            DUMP_FILE_READ_HISTORY -> fileReadHistoryReportFile = File(value)
             INCLUDE_COMPILE_CLASSPATH -> setFlag(KaptFlag.INCLUDE_COMPILE_CLASSPATH, value)
 
             DETECT_MEMORY_LEAKS_OPTION -> setSelector(enumValues<DetectMemoryLeaksMode>(), value) { detectMemoryLeaks = it }
@@ -169,7 +167,11 @@ class Kapt3CommandLineProcessor : CommandLineProcessor {
 
 @Suppress("DEPRECATION")
 class Kapt3ComponentRegistrar : ComponentRegistrar {
+    override val supportsK2: Boolean
+        get() = false
+
     override fun registerProjectComponents(project: MockProject, configuration: CompilerConfiguration) {
+        if (configuration.getBoolean(USE_FIR)) return
         doOpenInternalPackagesIfRequired()
         val contentRoots = configuration[CLIConfigurationKeys.CONTENT_ROOTS] ?: emptyList()
 
@@ -261,7 +263,12 @@ class Kapt3ComponentRegistrar : ComponentRegistrar {
             moduleDescriptor: ModuleDescriptor
         ) {
             if (!platform.isJvm()) return
-            container.useInstance(KaptAnonymousTypeTransformer(analysisExtension))
+            container.useInstance(object : ReplaceWithSupertypeAnonymousTypeTransformer() {
+                override fun transformAnonymousType(descriptor: DeclarationDescriptorWithVisibility, type: KotlinType): KotlinType? {
+                    if (!analysisExtension.analyzePartially) return null
+                    return super.transformAnonymousType(descriptor, type)
+                }
+            })
         }
     }
 

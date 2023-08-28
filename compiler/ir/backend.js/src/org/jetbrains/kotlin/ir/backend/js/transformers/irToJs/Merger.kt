@@ -41,7 +41,7 @@ class Merger(
                         error("Missing name for declaration '${declaration}'")
                     }
 
-                    importStatements.putIfAbsent(declaration, rename(importStatement).importStatementWithName(importName))
+                    importStatements.putIfAbsent(declaration, rename(importStatement.importStatementWithName(importName)))
                 }
 
                 val classModels = (mutableMapOf<JsName, JsIrIcClassModel>() + f.classes)
@@ -148,7 +148,6 @@ class Merger(
                 ?.asSequence()
                 ?.flatMap { (it.subject as JsExport.Subject.Elements).elements }
                 ?.distinctBy { it.alias?.ident ?: it.name.ident }
-                ?.map { if (it.name.ident == it.alias?.ident) JsExport.Element(it.name, null) else it }
                 ?.toList()
 
             val oneLargeExportStatement = exportedElements?.let { JsExport(JsExport.Subject.Elements(it)) }
@@ -179,14 +178,14 @@ class Merger(
 
     private fun transitiveJsExport(): List<JsStatement> {
         return if (isEsModules) {
-            crossModuleReferences.transitiveJsExportFrom.map {
+            crossModuleReferences.transitiveExportFrom.map {
                 JsExport(JsExport.Subject.All, it.getRequireEsmName())
             }
         } else {
             val internalModuleName = ReservedJsNames.makeInternalModuleName()
             val exporterName = ReservedJsNames.makeJsExporterName()
 
-            crossModuleReferences.transitiveJsExportFrom.map {
+            crossModuleReferences.transitiveExportFrom.map {
                 JsInvocation(
                     JsNameRef(exporterName, it.internalName.makeRef()),
                     internalModuleName.makeRef()

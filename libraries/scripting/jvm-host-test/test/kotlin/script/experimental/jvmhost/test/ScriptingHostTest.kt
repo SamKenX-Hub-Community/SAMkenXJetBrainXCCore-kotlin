@@ -72,6 +72,7 @@ class ScriptingHostTest : TestCase() {
         Assert.assertEquals("\$\$result", resVal.name)
         Assert.assertEquals("kotlin.Int", resVal.type)
         val resField = resVal.scriptInstance!!::class.java.getDeclaredField("\$\$result")
+        resField.setAccessible(true)
         Assert.assertEquals(42, resField.get(resVal.scriptInstance!!))
     }
 
@@ -197,7 +198,7 @@ class ScriptingHostTest : TestCase() {
             makeSimpleConfigurationWithTestImport()
         }
         val output = captureOut {
-            BasicJvmScriptingHost().eval(script.toScriptSource(), compilationConfiguration, null).throwOnFailure()
+            BasicJvmScriptingHost().eval(script.toScriptSource(), compilationConfiguration, null).throwOnFailure().throwOnExceptionResult()
         }.lines()
         Assert.assertEquals(greeting, output)
     }
@@ -221,6 +222,75 @@ class ScriptingHostTest : TestCase() {
             ).throwOnFailure()
         }.lines()
         Assert.assertEquals(greeting, output)
+    }
+
+    @Test
+    fun testSimpleImportWithImplicitReceiverRef() {
+        val greeting = listOf("Hello from helloWithVal script!", "Hello from imported helloWithVal script!")
+        val script = "println(\"Hello from imported \${(::helloScriptName).get()} script!\")"
+        val definition = createJvmScriptDefinitionFromTemplate<SimpleScriptTemplate>(
+            compilation = {
+                makeSimpleConfigurationWithTestImport()
+                implicitReceivers(String::class)
+            },
+            evaluation = {
+                implicitReceivers("abc")
+            }
+        )
+        val output = captureOut {
+            BasicJvmScriptingHost().eval(
+                script.toScriptSource(), definition.compilationConfiguration, definition.evaluationConfiguration
+            ).throwOnFailure()
+        }.lines()
+        Assert.assertEquals(greeting, output)
+    }
+
+    @Test
+    fun testSimpleScriptWithImplicitReceiver() {
+        val greeting = listOf("3")
+        val script = "println(length)"
+        val definition = createJvmScriptDefinitionFromTemplate<SimpleScriptTemplate>(
+            compilation = {
+                implicitReceivers(String::class)
+            },
+            evaluation = {
+                implicitReceivers("abc")
+            }
+        )
+        val output = captureOut {
+            val retVal = BasicJvmScriptingHost().eval(
+                script.toScriptSource(), definition.compilationConfiguration, definition.evaluationConfiguration
+            ).valueOrThrow().returnValue
+            if (retVal is ResultValue.Error) throw retVal.error
+        }.lines()
+        Assert.assertEquals(greeting, output)
+    }
+
+    fun testScriptWithImplicitReceiversWithSameShortName() {
+        val result = listOf("42")
+        val script = "println(v1 + v2)"
+        val definition = createJvmScriptDefinitionFromTemplate<SimpleScriptTemplate>(
+            compilation = {
+                updateClasspath(classpathFromClass<kotlin.script.experimental.jvmhost.test.forScript.p1.TestClass>())
+                implicitReceivers(
+                    kotlin.script.experimental.jvmhost.test.forScript.p1.TestClass::class,
+                    kotlin.script.experimental.jvmhost.test.forScript.p2.TestClass::class
+                )
+            },
+            evaluation = {
+                implicitReceivers(
+                    kotlin.script.experimental.jvmhost.test.forScript.p1.TestClass("4"),
+                    kotlin.script.experimental.jvmhost.test.forScript.p2.TestClass("2")
+                )
+            }
+        )
+        val output = captureOut {
+            val retVal = BasicJvmScriptingHost().eval(
+                script.toScriptSource(), definition.compilationConfiguration, definition.evaluationConfiguration
+            ).valueOrThrow().returnValue
+            if (retVal is ResultValue.Error) throw retVal.error
+        }.lines()
+        Assert.assertEquals(result, output)
     }
 
     @Test
@@ -354,7 +424,7 @@ class ScriptingHostTest : TestCase() {
             }
         }
         val output = captureOut {
-            BasicJvmScriptingHost().eval(mainScript, compilationConfiguration, evaluationConfiguration).throwOnFailure()
+            BasicJvmScriptingHost().eval(mainScript, compilationConfiguration, evaluationConfiguration).throwOnFailure().throwOnExceptionResult()
         }.lines()
         return output
     }
@@ -398,7 +468,8 @@ class ScriptingHostTest : TestCase() {
             compilerOptions("-no-stdlib")
         }
         assertTrue(res1 is ResultWithDiagnostics.Failure)
-        res1.reports.find { it.message.startsWith("Unresolved reference: println") }
+        val regex = "Unresolved reference\\W+println".toRegex()
+        res1.reports.find { it.message.contains(regex) }
             ?: fail("Expected unresolved reference report. Reported:\n  ${res1.reports.joinToString("\n  ") { it.message }}")
 
         val res2 = evalScriptWithConfiguration(script) {
@@ -568,6 +639,17 @@ fun <T> ResultWithDiagnostics<T>.throwOnFailure(): ResultWithDiagnostics<T> = ap
         throw Exception(
             "Compilation/evaluation failed:\n  ${reports.joinToString("\n  ") { it.exception?.toString() ?: it.message }}",
             firstExceptionFromReports
+        )
+    }
+}
+
+fun <T> ResultWithDiagnostics<T>.throwOnExceptionResult(): ResultWithDiagnostics<T> = apply {
+    if (this is ResultWithDiagnostics.Success) {
+        val result = (this.value as? EvaluationResult)
+        val error = (result?.returnValue as? ResultValue.Error)?.error
+        if (error != null) throw Exception(
+            "Evaluation failed:\n  ${reports.joinToString("\n  ") { it.exception?.toString() ?: it.message }}",
+            error
         )
     }
 }

@@ -13,7 +13,7 @@ import org.jetbrains.kotlin.analysis.api.calls.KtCallableMemberCall
 import org.jetbrains.kotlin.analysis.api.diagnostics.KtDiagnostic
 import org.jetbrains.kotlin.analysis.api.impl.base.KtMapBackedSubstitutor
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KtDeclarationRendererForSource
-import org.jetbrains.kotlin.analysis.api.renderer.declarations.modifiers.renderers.KtRendererModifierFilter
+import org.jetbrains.kotlin.analysis.api.renderer.declarations.modifiers.renderers.KtRendererKeywordFilter
 import org.jetbrains.kotlin.analysis.api.scopes.KtScope
 import org.jetbrains.kotlin.analysis.api.signatures.KtCallableSignature
 import org.jetbrains.kotlin.analysis.api.signatures.KtFunctionLikeSignature
@@ -42,7 +42,7 @@ internal fun KtAnalysisSession.stringRepresentation(any: Any): String = with(any
                     is KtConstructorSymbol -> "<constructor>"
                     is KtPropertyGetterSymbol -> callableIdIfNonLocal ?: "<getter>"
                     is KtPropertySetterSymbol -> callableIdIfNonLocal ?: "<setter>"
-                    else -> error("unexpected symbol kind in KtCall: ${this@with::class.java}")
+                    else -> error("unexpected symbol kind in KtCall: ${this@with::class}")
                 }
             )
             append("(")
@@ -185,7 +185,7 @@ internal fun renderScopeWithParentDeclarations(scope: KtScope): String = prettyP
 
     val renderingOptions = KtDeclarationRendererForSource.WITH_SHORT_NAMES.with {
         modifiersRenderer = modifiersRenderer.with {
-            modifierFilter = KtRendererModifierFilter.NONE
+            keywordsRenderer = keywordsRenderer.with { keywordFilter = KtRendererKeywordFilter.NONE }
         }
     }
 

@@ -6,13 +6,15 @@
 package org.jetbrains.kotlin.analysis.low.level.api.fir.project.structure
 
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.ModificationTracker
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.search.DelegatingGlobalSearchScope
+import com.intellij.psi.util.CachedValue
+import com.intellij.psi.util.CachedValueProvider
+import com.intellij.psi.util.CachedValuesManager
 import org.jetbrains.annotations.TestOnly
 import org.jetbrains.kotlin.analysis.low.level.api.fir.providers.LLFirBuiltinsAndCloneableSessionProvider
 import org.jetbrains.kotlin.analysis.low.level.api.fir.sessions.LLFirBuiltinsAndCloneableSession
-import org.jetbrains.kotlin.analysis.low.level.api.fir.stubBased.deserialization.JvmStubBasedFirDeserializedSymbolProvider
+import org.jetbrains.kotlin.analysis.low.level.api.fir.stubBased.deserialization.createStubBasedFirSymbolProviderForBuiltins
 import org.jetbrains.kotlin.analysis.project.structure.KtBuiltinsModule
 import org.jetbrains.kotlin.analysis.project.structure.KtModule
 import org.jetbrains.kotlin.analyzer.common.CommonPlatformAnalyzerServices
@@ -53,7 +55,7 @@ class LLFirBuiltinsSessionFactory(private val project: Project) {
 
     private val builtinsModules = ConcurrentHashMap<TargetPlatform, KtBuiltinsModule>()
 
-    private val builtinsAndCloneableSessions = ConcurrentHashMap<TargetPlatform, LLFirBuiltinsAndCloneableSession>()
+    private val builtinsAndCloneableSessions = ConcurrentHashMap<TargetPlatform, CachedValue<LLFirBuiltinsAndCloneableSession>>()
 
     /**
      * Returns the [platform]'s [KtBuiltinsModule]. [getBuiltinsModule] should be used instead of [getBuiltinsSession] when a
@@ -64,7 +66,12 @@ class LLFirBuiltinsSessionFactory(private val project: Project) {
         builtinsModules.getOrPut(platform) { KtBuiltinsModule(platform, platform.getAnalyzerServices(), project) }
 
     fun getBuiltinsSession(platform: TargetPlatform): LLFirBuiltinsAndCloneableSession =
-        builtinsAndCloneableSessions.getOrPut(platform) { createBuiltinsAndCloneableSession(platform) }
+        builtinsAndCloneableSessions.getOrPut(platform) {
+            CachedValuesManager.getManager(project).createCachedValue {
+                val session = createBuiltinsAndCloneableSession(platform)
+                CachedValueProvider.Result(session, session.createValidityTracker())
+            }
+        }.value
 
     @TestOnly
     fun clearForTheNextTest() {
@@ -75,7 +82,7 @@ class LLFirBuiltinsSessionFactory(private val project: Project) {
     private fun createBuiltinsAndCloneableSession(platform: TargetPlatform): LLFirBuiltinsAndCloneableSession {
         val builtinsModule = getBuiltinsModule(platform)
 
-        val session = LLFirBuiltinsAndCloneableSession(builtinsModule, ModificationTracker.NEVER_CHANGED, builtInTypes)
+        val session = LLFirBuiltinsAndCloneableSession(builtinsModule, builtInTypes)
         val moduleData = LLFirModuleData(builtinsModule).apply { bindSession(session) }
 
         return session.apply {
@@ -90,28 +97,7 @@ class LLFirBuiltinsSessionFactory(private val project: Project) {
             register(FirKotlinScopeProvider::class, kotlinScopeProvider)
 
             val symbolProvider = createCompositeSymbolProvider(this) {
-                val moduleDataProvider = SingleModuleDataProvider(moduleData)
-                add(
-                    object : JvmStubBasedFirDeserializedSymbolProvider(
-                        session,
-                        moduleDataProvider,
-                        kotlinScopeProvider,
-                        project,
-                        BuiltinsGlobalSearchScope(project),
-                        FirDeclarationOrigin.BuiltIns
-                    ) {
-                        private val syntheticFunctionInterfaceProvider = FirBuiltinSyntheticFunctionInterfaceProvider(
-                            session,
-                            moduleData,
-                            kotlinScopeProvider
-                        )
-
-                        override fun getClassLikeSymbolByClassId(classId: ClassId): FirClassLikeSymbol<*>? {
-                            return super.getClassLikeSymbolByClassId(classId)
-                                ?: syntheticFunctionInterfaceProvider.getClassLikeSymbolByClassId(classId)
-                        }
-                    }
-                )
+                add(createStubBasedFirSymbolProviderForBuiltins(project, session, moduleData, kotlinScopeProvider))
                 add(FirExtensionSyntheticFunctionInterfaceProvider(session, moduleData, kotlinScopeProvider))
                 add(FirCloneableSymbolProvider(session, moduleData, kotlinScopeProvider))
             }
@@ -125,15 +111,6 @@ class LLFirBuiltinsSessionFactory(private val project: Project) {
     companion object {
         fun getInstance(project: Project): LLFirBuiltinsSessionFactory =
             project.getService(LLFirBuiltinsSessionFactory::class.java)
-    }
-}
-
-internal class BuiltinsGlobalSearchScope(project: Project) : DelegatingGlobalSearchScope(project, allScope(project)) {
-    override fun contains(file: VirtualFile): Boolean {
-        if (file.extension != BuiltInSerializerProtocol.BUILTINS_FILE_EXTENSION) {
-            return false
-        }
-        return super.contains(file)
     }
 }
 

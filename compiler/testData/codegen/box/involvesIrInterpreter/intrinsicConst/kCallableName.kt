@@ -1,6 +1,9 @@
 // !LANGUAGE: +IntrinsicConstEvaluation
 // TARGET_BACKEND: JVM_IR
-// IGNORE_BACKEND_K1: JVM_IR
+// TARGET_BACKEND: JS_IR
+// TARGET_BACKEND: NATIVE
+// IGNORE_BACKEND_K1: JVM_IR, JS_IR, JS_IR_ES6, NATIVE
+
 fun <T> T.id() = this
 
 class A(val OK: Int, val somePropertyWithLongName: String) {
@@ -15,7 +18,7 @@ const val methodName = A::foo.<!EVALUATED("foo")!>name<!>
 const val suspendMethodName = A::bar.<!EVALUATED("bar")!>name<!>
 const val className = ::A.<!EVALUATED("<init>")!>name<!>
 const val topLevelPropName = ::topLevelProp.<!EVALUATED("topLevelProp")!>name<!>
-const val nameInComplexExpression = A::OK.<!EVALUATED("OK")!>name<!> <!EVALUATED("OK!")!>+ "!"<!>
+const val nameInComplexExpression = A::OK.name <!EVALUATED("OK!")!>+ "!"<!>
 
 // STOP_EVALUATION_CHECKS
 fun box(): String {

@@ -15,9 +15,7 @@ import org.jetbrains.kotlin.analysis.api.KtAnalysisSession
 import org.jetbrains.kotlin.analysis.api.annotations.*
 import org.jetbrains.kotlin.analysis.api.base.KtConstantValue
 import org.jetbrains.kotlin.analysis.api.components.DefaultTypeClassIds
-import org.jetbrains.kotlin.analysis.api.symbols.KtKotlinPropertySymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KtPropertySymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KtSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.*
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KtSymbolWithModality
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KtSymbolWithTypeParameters
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KtSymbolWithVisibility
@@ -25,7 +23,7 @@ import org.jetbrains.kotlin.analysis.api.symbols.pointers.KtSymbolPointer
 import org.jetbrains.kotlin.analysis.api.types.*
 import org.jetbrains.kotlin.analysis.project.structure.KtModule
 import org.jetbrains.kotlin.analysis.providers.createProjectWideOutOfBlockModificationTracker
-import org.jetbrains.kotlin.analysis.utils.errors.buildErrorWithAttachment
+import org.jetbrains.kotlin.utils.exceptions.errorWithAttachment
 import org.jetbrains.kotlin.asJava.elements.KtLightElement
 import org.jetbrains.kotlin.asJava.elements.KtLightMember
 import org.jetbrains.kotlin.asJava.elements.psiType
@@ -33,6 +31,11 @@ import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.light.classes.symbol.annotations.*
+import org.jetbrains.kotlin.light.classes.symbol.classes.SymbolLightClassBase
+import org.jetbrains.kotlin.light.classes.symbol.classes.SymbolLightClassForClassLike
+import org.jetbrains.kotlin.light.classes.symbol.classes.SymbolLightClassForInterface
+import org.jetbrains.kotlin.light.classes.symbol.classes.SymbolLightClassForInterfaceDefaultImpls
+import org.jetbrains.kotlin.light.classes.symbol.classes.modificationTrackerForClassInnerStuff
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.psi.KtTypeParameterListOwner
@@ -76,6 +79,24 @@ internal fun KtSymbolWithModality.computeSimpleModality(): String? = when (modal
     Modality.FINAL -> PsiModifier.FINAL
     Modality.ABSTRACT -> PsiModifier.ABSTRACT
     Modality.OPEN -> null
+}
+
+context(KtAnalysisSession)
+internal fun KtClassOrObjectSymbol.enumClassModality(): String? {
+    if (getMemberScope().getCallableSymbols().any { (it as? KtSymbolWithModality)?.modality == Modality.ABSTRACT }) {
+        return PsiModifier.ABSTRACT
+    }
+
+    if (getDeclaredMemberScope().getCallableSymbols().none { it is KtEnumEntrySymbol && it.requiresSubClass() }) {
+        return PsiModifier.FINAL
+    }
+
+    return null
+}
+
+context(KtAnalysisSession)
+private fun KtEnumEntrySymbol.requiresSubClass(): Boolean {
+    return getDeclaredMemberScope().getAllSymbols().any { it !is KtConstructorSymbol }
 }
 
 internal fun KtSymbolWithVisibility.toPsiVisibilityForMember(): String = visibility.toPsiVisibilityForMember()
@@ -259,7 +280,7 @@ internal fun BitSet.copy(): BitSet = clone() as BitSet
 context(KtAnalysisSession)
 internal fun <T : KtSymbol> KtSymbolPointer<T>.restoreSymbolOrThrowIfDisposed(): T =
     restoreSymbol()
-        ?: buildErrorWithAttachment("${this::class} pointer already disposed") {
+        ?: errorWithAttachment("${this::class} pointer already disposed") {
             withEntry("pointer", this@restoreSymbolOrThrowIfDisposed) { it.toString() }
         }
 
@@ -270,6 +291,12 @@ internal fun hasTypeParameters(
 ): Boolean = declaration?.typeParameters?.isNotEmpty() ?: declarationPointer.withSymbol(ktModule) {
     it.typeParameters.isNotEmpty()
 }
+
+internal val SymbolLightClassBase.interfaceIfDefaultImpls: SymbolLightClassForInterface?
+    get() = (this as? SymbolLightClassForInterfaceDefaultImpls)?.containingClass
+
+internal val SymbolLightClassBase.isDefaultImplsForInterfaceWithTypeParameters: Boolean
+    get() = interfaceIfDefaultImpls?.hasTypeParameters() ?: false
 
 internal fun KtSymbolPointer<*>.isValid(ktModule: KtModule): Boolean = analyzeForLightClasses(ktModule) {
     restoreSymbol() != null
@@ -299,5 +326,11 @@ internal inline fun <reified T> Collection<T>.toArrayIfNotEmptyOrDefault(default
 internal inline fun <R : PsiElement, T> R.cachedValue(
     crossinline computer: () -> T,
 ): T = CachedValuesManager.getCachedValue(this) {
-    CachedValueProvider.Result.createSingleDependency(computer(), project.createProjectWideOutOfBlockModificationTracker())
+    val value = computer()
+    val specialClassTrackers = (this as? SymbolLightClassForClassLike<*>)?.classOrObjectDeclaration?.modificationTrackerForClassInnerStuff()
+    if (specialClassTrackers != null) {
+        CachedValueProvider.Result.create(value, specialClassTrackers)
+    } else {
+        CachedValueProvider.Result.createSingleDependency(value, project.createProjectWideOutOfBlockModificationTracker())
+    }
 }

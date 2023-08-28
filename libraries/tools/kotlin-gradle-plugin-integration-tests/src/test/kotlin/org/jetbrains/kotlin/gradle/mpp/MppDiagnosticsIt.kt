@@ -8,8 +8,8 @@ package org.jetbrains.kotlin.gradle.mpp
 import org.gradle.util.GradleVersion
 import org.jetbrains.kotlin.gradle.plugin.diagnostics.KotlinToolingDiagnostics
 import org.jetbrains.kotlin.gradle.testbase.*
-import org.jetbrains.kotlin.gradle.util.replaceText
 import org.jetbrains.kotlin.test.TestMetadata
+import java.io.File
 import kotlin.io.path.appendText
 import kotlin.io.path.writeText
 
@@ -18,86 +18,189 @@ class MppDiagnosticsIt : KGPBaseTest() {
     @GradleTest
     fun testDiagnosticsRenderingSmoke(gradleVersion: GradleVersion) {
         project("diagnosticsRenderingSmoke", gradleVersion) {
-            val expectedOutputFile = projectName.testProjectPath.resolve("expectedOutput.txt").toFile()
             build {
-                assertEqualsToFile(expectedOutputFile, extractProjectsAndTheirVerboseDiagnostics())
+                assertEqualsToFile(expectedOutputFile(), extractProjectsAndTheirDiagnostics())
             }
         }
     }
 
     @GradleTest
-    fun testDeprecatedProperties(gradleVersion: GradleVersion) {
-        project("mppDeprecatedProperties", gradleVersion) {
-            checkDeprecatedProperties(isDeprecationExpected = false)
+    fun testDeprecatedMppProperties(gradleVersion: GradleVersion) {
+        for (deprecatedProperty in this.deprecatedFlags) {
+            project("mppDeprecatedProperties", gradleVersion) {
+                checkDeprecatedProperties(isDeprecationExpected = false)
 
-            this.gradleProperties.appendText(
-                defaultFlags.entries.joinToString(
-                    prefix = System.lineSeparator(),
-                    postfix = System.lineSeparator(),
-                    separator = System.lineSeparator(),
-                ) { (prop, value) -> "$prop=$value" }
-            )
-            checkDeprecatedProperties(isDeprecationExpected = true)
+                this.gradleProperties.appendText(
+                    "${deprecatedProperty.key}=${deprecatedProperty.value}${System.lineSeparator()}"
+                )
+                checkDeprecatedProperties(isDeprecationExpected = true)
 
-            // remove the MPP plugin from the top-level project and check the warnings are still reported in subproject
-            this.buildGradleKts.writeText("")
-            checkDeprecatedProperties(isDeprecationExpected = true)
+                // remove the MPP plugin from the top-level project and check the warnings are still reported in subproject
+                this.buildGradleKts.writeText("")
+                checkDeprecatedProperties(isDeprecationExpected = true)
 
-            this.gradleProperties.appendText("kotlin.mpp.deprecatedProperties.nowarn=true${System.lineSeparator()}")
-            checkDeprecatedProperties(isDeprecationExpected = false)
+                this.gradleProperties.appendText("kotlin.internal.suppressGradlePluginErrors=PreHMPPFlagsError${System.lineSeparator()}")
+                checkDeprecatedProperties(isDeprecationExpected = false)
+            }
         }
     }
 
     @GradleTest
-    @TestMetadata("new-mpp-lib-and-app/sample-lib-gradle-kotlin-dsl")
-    fun testReportTargetsOfTheSamplePlatformAndWithTheSameAttributes(gradleVersion: GradleVersion) {
-        project("new-mpp-lib-and-app/sample-lib-gradle-kotlin-dsl", gradleVersion) {
-            // A hack to make project compatible with GradleTestKit infrastructure
-            buildGradleKts.replaceText(
-                """id("org.jetbrains.kotlin.multiplatform").version("<pluginMarkerVersion>")""",
-                """id("org.jetbrains.kotlin.multiplatform")""",
-            )
-            buildGradleKts.appendText("""
-                
-                val distinguishAttribute = Attribute.of(String::class.java) 
-                fun org.jetbrains.kotlin.gradle.plugin.KotlinTarget.applyDistinguishingAttributeIfSet(value: String) {
-                    if (project.properties.containsKey("applyDistinguishingAttribute")) {
-                        attributes { 
-                            attribute(distinguishAttribute, value)
-                        }
-                    }
-                }
-                kotlin {
-                    jvm("jvm2") { applyDistinguishingAttributeIfSet("jvm2") }
-                    linuxArm64("linuxArm_A") { applyDistinguishingAttributeIfSet("linuxArm_A") }
-                    linuxArm64("linuxArm_B") { applyDistinguishingAttributeIfSet("linuxArm_B") }
-                }
-            """.trimIndent())
-
-            val warningMessage = """w: The following targets are not distinguishable:
-                    |  * 'jvm2', 'jvm6'
-                    |  * 'linuxArm_A', 'linuxArm_B'""".trimMargin()
-
-            build {
-                assertOutputContains(warningMessage)
+    fun testErrorDiagnosticBuildFails(gradleVersion: GradleVersion) {
+        project("errorDiagnosticBuildFails", gradleVersion) {
+            // 'assemble' (triggers compileKotlin-tasks indirectly): fail
+            buildAndFail("assemble") {
+                assertEqualsToFile(expectedOutputFile("assemble"), extractProjectsAndTheirDiagnostics())
             }
 
-            build(buildOptions = defaultBuildOptions.copy(freeArgs = listOf("-PapplyDistinguishingAttribute"))) {
-                assertOutputDoesNotContain(warningMessage)
+            // 'clean', not directly relevant to Kotlin tasks: build is OK
+            build("clean") {
+                assertEqualsToFile(expectedOutputFile("clean"), extractProjectsAndTheirDiagnostics())
+            }
+
+            // Custom task, irrelevant to Kotlin tasks: build is OK
+            build("myTask", "--rerun-tasks") {
+                assertEqualsToFile(expectedOutputFile("customTask"), extractProjectsAndTheirDiagnostics())
+            }
+
+            // commonizer task: build is OK (otherwise IDE will be bricked)
+            build("commonize") {
+                assertEqualsToFile(expectedOutputFile("commonize"), extractProjectsAndTheirDiagnostics())
             }
         }
+    }
+
+    @GradleTest
+    @GradleTestVersions(minVersion = TestVersions.Gradle.G_7_6)
+    @TestMetadata("errorDiagnosticBuildFails")
+    fun testErrorDiagnosticBuildFailsWithConfigurationCache(gradleVersion: GradleVersion) {
+        project("errorDiagnosticBuildFails", gradleVersion) {
+            buildAndFail("assemble", buildOptions = buildOptions.copy(configurationCache = true)) {
+                assertConfigurationCacheStored()
+                assertEqualsToFile(expectedOutputFile("assemble"), extractProjectsAndTheirDiagnostics())
+            }
+
+            // fails again
+            buildAndFail("assemble", buildOptions = buildOptions.copy(configurationCache = true)) {
+                assertConfigurationCacheReused()
+                assertEqualsToFile(expectedOutputFile("assemble-cache-reused"), extractProjectsAndTheirDiagnostics())
+            }
+        }
+    }
+
+    @GradleTest
+    fun testErrorDiagnosticBuildSucceeds(gradleVersion: GradleVersion) {
+        project("errorDiagnosticBuildSucceeds", gradleVersion) {
+            build("assemble") {
+                assertEqualsToFile(expectedOutputFile("assemble"), extractProjectsAndTheirDiagnostics())
+            }
+            build("myTask", "--rerun-tasks") {
+                assertEqualsToFile(expectedOutputFile("customTask"), extractProjectsAndTheirDiagnostics())
+            }
+        }
+    }
+
+    @GradleTest
+    fun testSuppressGradlePluginErrors(gradleVersion: GradleVersion) {
+        project("suppressGradlePluginErrors", gradleVersion) {
+            // build succeeds
+            build("assemble") {
+                assertEqualsToFile(expectedOutputFile(), extractProjectsAndTheirDiagnostics())
+            }
+        }
+    }
+
+    @GradleTest
+    fun testSuppressGradlePluginWarnings(gradleVersion: GradleVersion) {
+        project("suppressGradlePluginWarnings", gradleVersion) {
+            build("assemble") {
+                assertEqualsToFile(expectedOutputFile(), extractProjectsAndTheirDiagnostics())
+            }
+        }
+    }
+
+    @GradleTest
+    fun testSuppressGradlePluginFatals(gradleVersion: GradleVersion) {
+        project("suppressGradlePluginFatals", gradleVersion) {
+            buildAndFail("assemble") {
+                // Gradle 8.0+ for some reason renders exception twice in the build log
+                val testDataSuffixIfAny = if (gradleVersion < GradleVersion.version(TestVersions.Gradle.G_8_0)) "gradle-6.8.3" else null
+
+                assertEqualsToFile(expectedOutputFile(testDataSuffixIfAny), extractProjectsAndTheirDiagnostics())
+            }
+        }
+    }
+
+    @GradleTest
+    fun testErrorsFailOnlyRelevantProjects(gradleVersion: GradleVersion) {
+        project("errorsFailOnlyRelevantProjects", gradleVersion) {
+            buildAndFail("brokenProjectA:assemble") {
+                assertEqualsToFile(expectedOutputFile("brokenA"), extractProjectsAndTheirDiagnostics())
+            }
+
+            buildAndFail("brokenProjectB:assemble") {
+                assertEqualsToFile(expectedOutputFile("brokenB"), extractProjectsAndTheirDiagnostics())
+            }
+
+            build("healthyProject:assemble") {
+                assertEqualsToFile(expectedOutputFile("healthy"), extractProjectsAndTheirDiagnostics())
+            }
+
+            // Turn off parallel execution so that order of execution (and therefore the testdata) is stable
+            buildAndFail("assemble", buildOptions = buildOptions.copy(parallel = false)) {
+                assertEqualsToFile(expectedOutputFile("root"), extractProjectsAndTheirDiagnostics())
+            }
+
+            buildAndFail("assemble", "--continue", buildOptions = buildOptions.copy(parallel = false)) {
+                assertEqualsToFile(expectedOutputFile("root-with-continue"), extractProjectsAndTheirDiagnostics())
+            }
+        }
+    }
+
+    @GradleTest
+    fun testEarlyTasksMaterializationDoesntBreakReports(gradleVersion: GradleVersion) {
+        project("earlyTasksMaterializationDoesntBreakReports", gradleVersion) {
+            buildAndFail("assemble") {
+                assertEqualsToFile(expectedOutputFile(), extractProjectsAndTheirDiagnostics())
+            }
+        }
+    }
+
+    @GradleTest
+    fun testDiagnosticsRenderingWithStacktraceOption(gradleVersion: GradleVersion) {
+        project("diagnosticsRenderingWithStacktraceOption", gradleVersion) {
+            // KGP sets showDiagnosticsStacktrace=false and --full-stacktrace by default in tests,
+            // need to override that to mimic real-life scenarios
+            val options = buildOptions.copy(showDiagnosticsStacktrace = null, stacktraceMode = null)
+            build("help", buildOptions = options) {
+                assertEqualsToFile(expectedOutputFile("without-stacktrace"), extractProjectsAndTheirDiagnostics())
+            }
+
+            build("help", "--stacktrace", buildOptions = options) {
+                assertEqualsToFile(expectedOutputFile("with-stacktrace"), extractProjectsAndTheirDiagnostics())
+            }
+
+            build("help", "--full-stacktrace", buildOptions = options) {
+                assertEqualsToFile(expectedOutputFile("with-full-stacktrace"), extractProjectsAndTheirDiagnostics())
+            }
+        }
+    }
+
+    private fun TestProject.expectedOutputFile(suffix: String? = null): File {
+        val suffixIfAny = if (suffix != null) "-$suffix" else ""
+        return projectPath.resolve("expectedOutput$suffixIfAny.txt").toFile()
     }
 
     private fun TestProject.checkDeprecatedProperties(isDeprecationExpected: Boolean) {
         build {
             if (isDeprecationExpected)
-                output.assertHasDiagnostic(KotlinToolingDiagnostics.HierarchicalMultiplatformFlagsWarning)
+                output.assertHasDiagnostic(KotlinToolingDiagnostics.PreHMPPFlagsError)
             else
-                output.assertNoDiagnostic(KotlinToolingDiagnostics.HierarchicalMultiplatformFlagsWarning)
+                output.assertNoDiagnostic(KotlinToolingDiagnostics.PreHMPPFlagsError)
         }
     }
 
-    private val defaultFlags: Map<String, String>
+    private val deprecatedFlags: Map<String, String>
         get() = mapOf(
             "kotlin.mpp.enableGranularSourceSetsMetadata" to "true",
             "kotlin.mpp.enableCompatibilityMetadataVariant" to "false",

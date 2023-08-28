@@ -151,8 +151,20 @@ open class IncrementalCompilationJsMultiProjectIT : BaseIncrementalCompilationMu
     }
 }
 
-class IncrementalCompilationJsMultiProjectWithPreciseBackupIT : IncrementalCompilationJsMultiProjectIT() {
+open class IncrementalCompilationJsMultiProjectWithPreciseBackupIT : IncrementalCompilationJsMultiProjectIT() {
     override val defaultBuildOptions = super.defaultBuildOptions.copy(usePreciseOutputsBackup = true, keepIncrementalCompilationCachesInMemory = true)
+}
+
+class IncrementalCompilationFirJsMultiProject : IncrementalCompilationJsMultiProjectIT() {
+    override val defaultBuildOptions = super.defaultBuildOptions.copy(
+        languageVersion = "2.0"
+    )
+}
+
+class IncrementalCompilationFirJsMultiProjectWithPreciseBackupIT : IncrementalCompilationJsMultiProjectWithPreciseBackupIT() {
+    override val defaultBuildOptions = super.defaultBuildOptions.copy(
+        languageVersion = "2.0"
+    )
 }
 
 @JvmGradlePluginTests
@@ -868,7 +880,9 @@ abstract class BaseIncrementalCompilationMultiProjectIT : IncrementalCompilation
             // Perform the first non-incremental build without using Kotlin daemon so that incremental state is not produced
             build(
                 ":lib:compileKotlin",
-                "-Pkotlin.compiler.execution.strategy=${KotlinCompilerExecutionStrategy.IN_PROCESS.propertyValue}"
+                buildOptions = defaultBuildOptions.copy(
+                    compilerExecutionStrategy = KotlinCompilerExecutionStrategy.IN_PROCESS,
+                ),
             ) {
                 projectPath.resolve("lib/build/kotlin/${compileKotlinTaskName}/classpath-snapshot").let {
                     assert(!it.exists() || it.listDirectoryEntries().isEmpty())

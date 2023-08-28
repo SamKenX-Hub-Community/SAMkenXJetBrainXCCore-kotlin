@@ -35,6 +35,7 @@ import org.jetbrains.kotlin.psi.stubs.impl.KotlinAnnotationEntryStubImpl
 import org.jetbrains.kotlin.psi.stubs.impl.KotlinClassTypeBean
 import org.jetbrains.kotlin.psi.stubs.impl.KotlinPropertyStubImpl
 import org.jetbrains.kotlin.types.ConstantValueKind
+import org.jetbrains.kotlin.utils.exceptions.errorWithAttachment
 
 class StubBasedAnnotationDeserializer(
     private val session: FirSession,
@@ -60,15 +61,19 @@ class StubBasedAnnotationDeserializer(
     private fun deserializeAnnotation(
         ktAnnotation: KtAnnotationEntry
     ): FirAnnotation {
-        val userType =
-            ktAnnotation.getStubOrPsiChild(KtStubElementTypes.CONSTRUCTOR_CALLEE)?.getStubOrPsiChild(KtStubElementTypes.TYPE_REFERENCE)
-                ?.getStubOrPsiChild(KtStubElementTypes.USER_TYPE)!!
         return deserializeAnnotation(
             ktAnnotation,
-            userType.classId(),
+            getAnnotationClassId(ktAnnotation),
             ((ktAnnotation.stub ?: loadStubByElement(ktAnnotation)) as? KotlinAnnotationEntryStubImpl)?.valueArguments,
             ktAnnotation.useSiteTarget?.getAnnotationUseSiteTarget()
         )
+    }
+
+    fun getAnnotationClassId(ktAnnotation: KtAnnotationEntry): ClassId {
+        val userType = ktAnnotation.getStubOrPsiChild(KtStubElementTypes.CONSTRUCTOR_CALLEE)
+            ?.getStubOrPsiChild(KtStubElementTypes.TYPE_REFERENCE)
+            ?.getStubOrPsiChild(KtStubElementTypes.USER_TYPE)!!
+        return userType.classId()
     }
 
     private fun deserializeAnnotation(
@@ -103,20 +108,24 @@ class StubBasedAnnotationDeserializer(
                 source = KtRealPsiSourceElement(sourceElement)
                 val lookupTag = (value.value as KClassValue.Value.NormalClass).classId.toLookupTag()
                 val referencedType = lookupTag.constructType(ConeTypeProjection.EMPTY_ARRAY, isNullable = false)
-                val resolvedTypeRef = buildResolvedTypeRef {
-                    type = StandardClassIds.KClass.constructClassLikeType(arrayOf(referencedType), false)
-                }
+                val resolvedType = StandardClassIds.KClass.constructClassLikeType(arrayOf(referencedType), false)
                 argumentList = buildUnaryArgumentList(
                     buildClassReferenceExpression {
                         classTypeRef = buildResolvedTypeRef { type = referencedType }
-                        typeRef = resolvedTypeRef
+                        coneTypeOrNull = resolvedType
                     }
                 )
+                coneTypeOrNull = resolvedType
             }
-            is ArrayValue -> buildArrayOfCall {
-                source = KtRealPsiSourceElement(sourceElement)
-                argumentList = buildArgumentList {
-                    value.value.mapTo(arguments) { resolveValue(sourceElement, it) }
+            is ArrayValue -> {
+                buildArrayLiteral {
+                    source = KtRealPsiSourceElement(sourceElement)
+                    // Not quite precise, yet doesn't require annotation resolution
+                    coneTypeOrNull = (inferArrayValueType(value.value) ?: session.builtinTypes.anyType.type).createArrayType()
+
+                    argumentList = buildArgumentList {
+                        value.value.mapTo(arguments) { resolveValue(sourceElement, it) }
+                    }
                 }
             }
             is AnnotationValue -> {
@@ -140,8 +149,48 @@ class StubBasedAnnotationDeserializer(
             is IntValue -> const(ConstantValueKind.Int, value.value, session.builtinTypes.intType, sourceElement)
             NullValue -> const(ConstantValueKind.Null, null, session.builtinTypes.nullableAnyType, sourceElement)
             is StringValue -> const(ConstantValueKind.String, value.value, session.builtinTypes.stringType, sourceElement)
-            else -> error("Unexpected value $value")
+            else -> errorWithAttachment("Unexpected value ${value::class}") {
+                withEntry("value", value.toString())
+            }
         }
+    }
+
+    private fun inferArrayValueType(values: List<ConstantValue<*>>): ConeClassLikeType? {
+        if (values.isNotEmpty()) {
+            val firstValue = values.first()
+
+            for ((index, value) in values.withIndex()) {
+                if (index > 0 && value.javaClass != firstValue.javaClass) {
+                    return null
+                }
+            }
+
+            return when (firstValue) {
+                is BooleanValue -> session.builtinTypes.booleanType.type
+                is ByteValue -> session.builtinTypes.byteType.type
+                is CharValue -> session.builtinTypes.charType.type
+                is ShortValue -> session.builtinTypes.shortType.type
+                is IntValue -> session.builtinTypes.intType.type
+                is LongValue -> session.builtinTypes.longType.type
+                is UByteValue -> session.builtinTypes.byteType.type
+                is UShortValue -> session.builtinTypes.shortType.type
+                is UIntValue -> session.builtinTypes.intType.type
+                is ULongValue -> session.builtinTypes.longType.type
+                is DoubleValue -> session.builtinTypes.doubleType.type
+                is FloatValue -> session.builtinTypes.floatType.type
+                is AnnotationValue -> session.builtinTypes.annotationType.type
+                is StringValue -> session.builtinTypes.stringType.type
+                is EnumValue -> firstValue.enumClassId.constructClassLikeType(ConeTypeProjection.EMPTY_ARRAY, isNullable = false)
+                is ArrayValue -> values.firstNotNullOfOrNull { inferArrayValueType((it as ArrayValue).value) }?.createArrayType()
+                is KClassValue -> {
+                    val kClassType = session.builtinTypes.anyType.type
+                    StandardClassIds.KClass.constructClassLikeType(arrayOf(kClassType), isNullable = false)
+                }
+                else -> null
+            }
+        }
+
+        return null
     }
 
     private fun <T> const(
@@ -155,7 +204,7 @@ class StubBasedAnnotationDeserializer(
             kind,
             value,
             setType = true
-        ).apply { this.replaceTypeRef(typeRef) }
+        ).apply { this.replaceConeTypeOrNull(typeRef.type) }
     }
 
     private fun PsiElement.toEnumEntryReferenceExpression(classId: ClassId, entryName: Name): FirExpression {
@@ -175,7 +224,7 @@ class StubBasedAnnotationDeserializer(
                 name = entryName
             }
             if (enumEntrySymbol != null) {
-                typeRef = enumEntrySymbol.returnTypeRef
+                coneTypeOrNull = enumEntrySymbol.returnTypeRef.coneTypeOrNull
             }
         }
     }

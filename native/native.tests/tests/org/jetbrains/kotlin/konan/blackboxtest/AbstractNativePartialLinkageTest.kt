@@ -9,6 +9,7 @@ import com.intellij.testFramework.TestDataFile
 import org.jetbrains.kotlin.codegen.ProjectInfo
 import org.jetbrains.kotlin.klib.PartialLinkageTestUtils
 import org.jetbrains.kotlin.klib.PartialLinkageTestUtils.Dependencies
+import org.jetbrains.kotlin.klib.PartialLinkageTestUtils.Dependency
 import org.jetbrains.kotlin.klib.PartialLinkageTestUtils.MAIN_MODULE_NAME
 import org.jetbrains.kotlin.klib.PartialLinkageTestUtils.ModuleBuildDirs
 import org.jetbrains.kotlin.konan.blackboxtest.support.*
@@ -27,21 +28,27 @@ import org.opentest4j.TestAbortedException
 import java.io.File
 
 @Tag("partial-linkage")
-@UsePartialLinkage(UsePartialLinkage.Mode.ENABLED_WITH_WARNING)
+@UsePartialLinkage(UsePartialLinkage.Mode.DEFAULT)
 abstract class AbstractNativePartialLinkageTest : AbstractNativeSimpleTest() {
     private inner class NativeTestConfiguration(testPath: String) : PartialLinkageTestUtils.TestConfiguration {
         override val testDir = getAbsoluteFile(testPath)
         override val buildDir get() = this@AbstractNativePartialLinkageTest.buildDir
         override val stdlibFile get() = this@AbstractNativePartialLinkageTest.stdlibFile
 
-        override val testModeName = with(testRunSettings.get<CacheMode>()) {
-            val cacheModeAlias = when {
-                !useStaticCacheForDistributionLibraries -> CacheMode.Alias.NO
-                !useStaticCacheForUserLibraries -> CacheMode.Alias.STATIC_ONLY_DIST
-                else -> CacheMode.Alias.STATIC_EVERYWHERE
-            }
+        override val testModeConstructorParameters = buildMap {
+            this["isNative"] = "true"
 
-            "NATIVE_CACHE_${cacheModeAlias}"
+            val cacheMode = testRunSettings.get<CacheMode>()
+            when {
+                cacheMode.useStaticCacheForUserLibraries -> {
+                    this["staticCache"] = "TestMode.Scope.EVERYWHERE"
+                    this["lazyIr"] = "TestMode.Scope.NOWHERE" // by default LazyIR is disabled
+                }
+                cacheMode.useStaticCacheForDistributionLibraries -> {
+                    this["staticCache"] = "TestMode.Scope.DISTRIBUTION"
+                    this["lazyIr"] = "TestMode.Scope.NOWHERE" // by default LazyIR is disabled
+                }
+            }
         }
 
         override fun customizeModuleSources(moduleName: String, moduleSourceDir: File) {
@@ -56,8 +63,8 @@ abstract class AbstractNativePartialLinkageTest : AbstractNativeSimpleTest() {
             klibFile: File
         ) = this@AbstractNativePartialLinkageTest.buildKlib(moduleName, buildDirs.sourceDir, dependencies, klibFile)
 
-        override fun buildBinaryAndRun(mainModuleKlibFile: File, dependencies: Dependencies) =
-            this@AbstractNativePartialLinkageTest.buildBinaryAndRun(dependencies)
+        override fun buildBinaryAndRun(mainModule: Dependency, otherDependencies: Dependencies) =
+            this@AbstractNativePartialLinkageTest.buildBinaryAndRun(mainModule, otherDependencies)
 
         override fun onNonEmptyBuildDirectory(directory: File) = backupDirectoryContents(directory)
 
@@ -97,7 +104,7 @@ abstract class AbstractNativePartialLinkageTest : AbstractNativeSimpleTest() {
             settings = testRunSettings,
             freeCompilerArgs = testCase.freeCompilerArgs,
             sourceModules = testCase.modules,
-            dependencies = createLibraryDependencies(dependencies, forExecutable = false),
+            dependencies = createLibraryDependencies(dependencies),
             expectedArtifact = klibArtifact
         )
 
@@ -106,7 +113,7 @@ abstract class AbstractNativePartialLinkageTest : AbstractNativeSimpleTest() {
         producedKlibs += ProducedKlib(moduleName, klibArtifact, dependencies) // Remember the artifact with its dependencies.
     }
 
-    private fun buildBinaryAndRun(allDependencies: Dependencies) {
+    private fun buildBinaryAndRun(mainModule: Dependency, otherDependencies: Dependencies) {
         val cacheDependencies = if (useStaticCacheForUserLibraries) {
             producedKlibs.map { producedKlib ->
                 buildCacheForKlib(producedKlib)
@@ -126,7 +133,11 @@ abstract class AbstractNativePartialLinkageTest : AbstractNativeSimpleTest() {
             freeCompilerArgs = testCase.freeCompilerArgs,
             sourceModules = testCase.modules,
             extras = testCase.extras,
-            dependencies = createLibraryDependencies(allDependencies, forExecutable = true) + cacheDependencies,
+            dependencies = buildList {
+                this += createIncludedDependency(mainModule)
+                this += createLibraryDependencies(otherDependencies)
+                this += cacheDependencies
+            },
             expectedArtifact = executableArtifact
         )
 
@@ -181,20 +192,17 @@ abstract class AbstractNativePartialLinkageTest : AbstractNativeSimpleTest() {
         }
     }
 
-    private fun createLibraryDependencies(
-        dependencies: Dependencies,
-        forExecutable: Boolean
-    ): Iterable<TestCompilationDependency<KLIB>> =
-        dependencies.regularDependencies.map { dependency ->
-            val klib = KLIB(dependency.libraryFile)
-            if (forExecutable && dependency.moduleName == MAIN_MODULE_NAME) klib.toIncludedDependency() else klib.toDependency()
-        } + dependencies.friendDependencies.map { KLIB(it.libraryFile).toFriendDependency() }
+    private fun createIncludedDependency(dependency: Dependency): TestCompilationDependency<KLIB> =
+        KLIB(dependency.libraryFile).toIncludedDependency()
 
-    private fun createLibraryCacheDependencies(
-        dependencies: Dependencies
-    ): Iterable<TestCompilationDependency<KLIBStaticCache>> = dependencies.regularDependencies.mapNotNull { dependency ->
-        if (dependency.libraryFile != stdlibFile) KLIB(dependency.libraryFile).toStaticCacheArtifact().toDependency() else null
-    }
+    private fun createLibraryDependencies(dependencies: Dependencies): Iterable<TestCompilationDependency<KLIB>> =
+        dependencies.regularDependencies.map { dependency -> KLIB(dependency.libraryFile).toDependency() } +
+                dependencies.friendDependencies.map { KLIB(it.libraryFile).toFriendDependency() }
+
+    private fun createLibraryCacheDependencies(dependencies: Dependencies): Iterable<TestCompilationDependency<KLIBStaticCache>> =
+        dependencies.regularDependencies.mapNotNull { dependency ->
+            if (dependency.libraryFile != stdlibFile) KLIB(dependency.libraryFile).toStaticCacheArtifact().toDependency() else null
+        }
 
     private fun KLIB.toDependency() = ExistingDependency(this, Library)
     private fun KLIB.toIncludedDependency() = ExistingDependency(this, IncludedLibrary)
@@ -212,7 +220,11 @@ abstract class AbstractNativePartialLinkageTest : AbstractNativeSimpleTest() {
 
     companion object {
         private val COMPILER_ARGS = TestCompilerArgs(
-            listOf("-nostdlib") // stdlib is passed explicitly.
+            listOf(
+                "-nostdlib", // stdlib is passed explicitly.
+                "-Xsuppress-version-warnings", // Don't fail on language version warnings.
+                "-Werror" // Halt on any unexpected warning.
+            )
         )
 
         private val DEFAULT_EXTRAS = WithTestRunnerExtras(TestRunnerType.DEFAULT)

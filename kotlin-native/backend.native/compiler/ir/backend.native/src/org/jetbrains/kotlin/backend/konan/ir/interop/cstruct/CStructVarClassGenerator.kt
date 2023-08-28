@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.backend.konan.ir.interop.DescriptorToIrTranslationMi
 import org.jetbrains.kotlin.backend.konan.ir.interop.irInstanceInitializer
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.IrBuiltIns
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.builders.declarations.buildFun
 import org.jetbrains.kotlin.ir.builders.declarations.buildValueParameter
@@ -17,7 +18,7 @@ import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
 import org.jetbrains.kotlin.ir.expressions.impl.IrDelegatingConstructorCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrFunctionExpressionImpl
-import org.jetbrains.kotlin.ir.interpreter.toIrConst
+import org.jetbrains.kotlin.ir.util.toIrConst
 import org.jetbrains.kotlin.ir.symbols.impl.IrFieldSymbolImpl
 import org.jetbrains.kotlin.ir.types.classOrNull
 import org.jetbrains.kotlin.ir.types.makeNullable
@@ -26,6 +27,7 @@ import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi2ir.generators.GeneratorContext
 
+@OptIn(ObsoleteDescriptorBasedAPI::class)
 internal class CStructVarClassGenerator(
         context: GeneratorContext,
         private val companionGenerator: CStructVarCompanionGenerator,
@@ -39,7 +41,7 @@ internal class CStructVarClassGenerator(
     override val postLinkageSteps: MutableList<() -> Unit> = mutableListOf()
 
     fun findOrGenerateCStruct(classDescriptor: ClassDescriptor, parent: IrDeclarationContainer): IrClass {
-        val irClassSymbol = symbolTable.referenceClass(classDescriptor)
+        val irClassSymbol = symbolTable.descriptorExtension.referenceClass(classDescriptor)
         return if (!irClassSymbol.isBound) {
             provideIrClassForCStruct(classDescriptor).also {
                 it.patchDeclarationParents(parent)
@@ -146,7 +148,7 @@ internal class CStructVarClassGenerator(
 
         val managedValType = managedVal.getter!!.returnType
 
-        managedVal.backingField = symbolTable.declareField(
+        managedVal.backingField = symbolTable.descriptorExtension.declareField(
                 SYNTHETIC_OFFSET,
                 SYNTHETIC_OFFSET,
                 IrDeclarationOrigin.PROPERTY_BACKING_FIELD,
@@ -167,16 +169,16 @@ internal class CStructVarClassGenerator(
                 }
 
         val cleanerField = irFactory.createField(
-                SYNTHETIC_OFFSET,
-                SYNTHETIC_OFFSET,
-                IrDeclarationOrigin.DEFINED,
-                IrFieldSymbolImpl(),
-                Name.identifier("cleaner"),
-                symbols.createCleaner.owner.returnType,
-                DescriptorVisibilities.PRIVATE,
+                startOffset = SYNTHETIC_OFFSET,
+                endOffset = SYNTHETIC_OFFSET,
+                origin = IrDeclarationOrigin.DEFINED,
+                name = Name.identifier("cleaner"),
+                visibility = DescriptorVisibilities.PRIVATE,
+                symbol = IrFieldSymbolImpl(),
+                type = symbols.createCleaner.owner.returnType,
                 isFinal = true,
+                isStatic = false,
                 isExternal = false,
-                isStatic = false
         ).also { field ->
             field.parent = irClass
             field.initializer = irBuilder(irBuiltIns, field.symbol, SYNTHETIC_OFFSET, SYNTHETIC_OFFSET).run {
@@ -273,7 +275,7 @@ internal class CStructVarClassGenerator(
                         ).also {
                             it.putValueArgument(0, irGet(irConstructor.valueParameters[0]))
                         }
-                        +irInstanceInitializer(symbolTable.referenceClass(irClass.descriptor))
+                        +irInstanceInitializer(symbolTable.descriptorExtension.referenceClass(irClass.descriptor))
                     }
                 }
             }
@@ -288,7 +290,7 @@ internal class CStructVarClassGenerator(
                                 it.putTypeArgument(0, irConstructor.valueParameters[0].type)
                                 it.putValueArgument(0, irGet(irConstructor.valueParameters[0]))
                         }
-                        +irInstanceInitializer(symbolTable.referenceClass(irClass.descriptor))
+                        +irInstanceInitializer(symbolTable.descriptorExtension.referenceClass(irClass.descriptor))
                     }
                 }
             }

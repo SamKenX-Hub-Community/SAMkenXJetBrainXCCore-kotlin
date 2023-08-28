@@ -28,14 +28,14 @@ class K2NewMultiplatformIT : NewMultiplatformIT() {
     override fun defaultBuildOptions(): BuildOptions = super.defaultBuildOptions().copy(languageVersion = "2.0")
 }
 
-@Ignore
+@Disabled("Used for local testing only")
 class K2CommonizerIT : CommonizerIT() {
-    override fun defaultBuildOptions(): BuildOptions = super.defaultBuildOptions().copy(languageVersion = "2.0")
+    override val defaultBuildOptions: BuildOptions get() = super.defaultBuildOptions.copy(languageVersion = "2.0")
 }
 
 @Ignore
 class K2CommonizerHierarchicalIT : CommonizerHierarchicalIT() {
-    override fun defaultBuildOptions(): BuildOptions = super.defaultBuildOptions().copy(languageVersion = "2.0")
+    override val defaultBuildOptions: BuildOptions = super.defaultBuildOptions.copy(languageVersion = "2.0")
 }
 
 @MppGradlePluginTests
@@ -44,7 +44,11 @@ class CustomK2Tests : KGPBaseTest() {
     @GradleTest
     @DisplayName("Serialization plugin in common source set. KT-56911")
     fun testHmppDependenciesInJsTests(gradleVersion: GradleVersion) {
-        project("k2-serialization-plugin-in-common-sourceset", gradleVersion) {
+        project(
+            "k2-serialization-plugin-in-common-sourceset",
+            gradleVersion,
+            buildOptions = defaultBuildOptions.copy(languageVersion = "2.0"),
+        ) {
             val taskToExecute = ":compileKotlinJs"
             build(taskToExecute) {
                 assertTasksExecuted(taskToExecute)
@@ -57,6 +61,17 @@ class CustomK2Tests : KGPBaseTest() {
     fun testHmppCompilationWithoutJsTarget(gradleVersion: GradleVersion) {
         with(project("k2-mpp-without-js", gradleVersion)) {
             val taskToExecute = ":compileIntermediateMainKotlinMetadata"
+            build(taskToExecute) {
+                assertTasksExecuted(taskToExecute)
+            }
+        }
+    }
+
+    @GradleTest
+    @DisplayName("HMPP compilation with JS target and old stdlib. KT-59151")
+    fun testHmppCompilationWithJsAndOldStdlib(gradleVersion: GradleVersion) {
+        with(project("k2-mpp-js-old-stdlib", gradleVersion, buildOptions = defaultBuildOptions.copy(languageVersion = "2.0"))) {
+            val taskToExecute = ":compileKotlinJs"
             build(taskToExecute) {
                 assertTasksExecuted(taskToExecute)
             }
@@ -78,7 +93,13 @@ class CustomK2Tests : KGPBaseTest() {
     @GradleTest
     @DisplayName("Compiling shared native source with FirFakeOverrideGenerator referencing a common entity. KT-58145")
     fun kt581450MppNativeSharedCrash(gradleVersion: GradleVersion) {
-        with(project("kt-581450-mpp-native-shared-crash", gradleVersion, buildOptions = defaultBuildOptions.copy(languageVersion = "2.0"))) {
+        with(
+            project(
+                "kt-581450-mpp-native-shared-crash",
+                gradleVersion,
+                buildOptions = defaultBuildOptions.copy(languageVersion = "2.0")
+            )
+        ) {
             val taskToExecute = ":compileNativeMainKotlinMetadata"
             build(taskToExecute) {
                 assertTasksExecuted(taskToExecute)
@@ -98,6 +119,56 @@ class CustomK2Tests : KGPBaseTest() {
             )
         ) {
             val taskToExecute = ":compileNativeMainKotlinMetadata"
+            build(taskToExecute) {
+                assertTasksExecuted(taskToExecute)
+            }
+        }
+    }
+
+    @GradleTest
+    @DisplayName("Java binary dependency class contains unresolved annotation argument. KT-60181")
+    fun kt60181JavaDependencyAnnotatedWithUnresolved(gradleVersion: GradleVersion) {
+        with(
+            project(
+                "k2-java-dep-unresolved-annotation-argument",
+                gradleVersion,
+                buildOptions = defaultBuildOptions.copy(languageVersion = "2.0"),
+            )
+        ) {
+            val taskToExecute = ":compileKotlin"
+            build(taskToExecute) {
+                assertTasksExecuted(taskToExecute)
+            }
+        }
+    }
+
+    @GradleTest
+    @DisplayName("All source sets have opt-in for annotation defined in platform source set. KT-60755")
+    fun kt60755OptInDefinedInPlatform(gradleVersion: GradleVersion) {
+        with(
+            project(
+                "k2-mpp-opt-in-in-platform",
+                gradleVersion,
+                buildOptions = defaultBuildOptions.copy(languageVersion = "2.0"),
+            )
+        ) {
+            val taskToExecute = ":compileKotlinJvm"
+            build(taskToExecute) {
+                assertTasksExecuted(taskToExecute)
+                assertOutputDoesNotContain("Opt-in requirement marker foo.bar.MyOptIn is unresolved")
+            }
+        }
+    }
+
+    @GradleTest
+    @DisplayName("Common metadata compilation. KT-60943")
+    fun kt60943CommonMetadataCompilation(gradleVersion: GradleVersion) {
+        project(
+            "k2-serialization-plugin-in-common-sourceset",
+            gradleVersion,
+            buildOptions = defaultBuildOptions.copy(languageVersion = "2.0"),
+        ) {
+            val taskToExecute = ":compileCommonMainKotlinMetadata"
             build(taskToExecute) {
                 assertTasksExecuted(taskToExecute)
             }

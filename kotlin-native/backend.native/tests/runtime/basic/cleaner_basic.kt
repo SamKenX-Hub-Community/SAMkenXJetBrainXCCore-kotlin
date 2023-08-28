@@ -2,7 +2,7 @@
  * Copyright 2010-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the LICENSE file.
  */
-@file:OptIn(ExperimentalStdlibApi::class, FreezingIsDeprecated::class,
+@file:OptIn(kotlin.experimental.ExperimentalNativeApi::class, FreezingIsDeprecated::class,
         kotlin.native.runtime.NativeRuntimeApi::class, kotlinx.cinterop.ExperimentalForeignApi::class)
 
 package runtime.basic.cleaner_basic
@@ -10,6 +10,8 @@ package runtime.basic.cleaner_basic
 import kotlin.test.*
 
 import kotlin.native.internal.*
+import kotlin.concurrent.AtomicInt
+import kotlin.concurrent.AtomicNativePtr
 import kotlin.native.concurrent.*
 import kotlin.native.ref.WeakReference
 import kotlin.native.ref.Cleaner

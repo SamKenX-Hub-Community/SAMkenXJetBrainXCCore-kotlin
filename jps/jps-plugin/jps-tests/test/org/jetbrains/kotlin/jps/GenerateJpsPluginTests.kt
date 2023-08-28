@@ -38,7 +38,7 @@ fun main(args: Array<String>) {
             }
 
             // IR
-            testClass<AbstractIncrementalJvmJpsTest> {
+            testClass<AbstractIncrementalK1JvmJpsTest> {
                 model("incremental/multiModule/common", extension = null, excludeParentDirs = true, targetBackend = TargetBackend.JVM_IR)
                 model("incremental/multiModule/jvm", extension = null, excludeParentDirs = true, targetBackend = TargetBackend.JVM_IR)
                 model(
@@ -88,9 +88,6 @@ fun main(args: Array<String>) {
 
             testClass<AbstractJvmLookupTrackerTest> {
                 model("incremental/lookupTracker/jvm", extension = null, recursive = false)
-            }
-            testClass<AbstractJsLookupTrackerTest> {
-                model("incremental/lookupTracker/js", extension = null, recursive = false)
             }
             testClass<AbstractJsKlibLookupTrackerTest> {
                 // todo: investigate why lookups are different from non-klib js

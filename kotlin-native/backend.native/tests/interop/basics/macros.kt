@@ -2,7 +2,7 @@
  * Copyright 2010-2023 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the LICENSE file.
  */
-@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+@file:OptIn(kotlin.experimental.ExperimentalNativeApi::class, kotlinx.cinterop.ExperimentalForeignApi::class)
 
 import kotlin.test.*
 import cmacros.*
@@ -60,7 +60,7 @@ fun main(args: Array<String>) {
         assertEquals(doubleNanBase, 0x7ff8000000000000L)
         assertEquals(floatNanBase, DEFAULT_FLOAT_NAN.toRawBits())
         assertEquals(doubleNanBase, DEFAULT_DOUBLE_NAN.toRawBits())
-        assertEquals(floatNanBase or 0x12345, OTHER_FLOAT_NAN.toRawBits())
-        assertEquals(doubleNanBase or 0x123456789abL, OTHER_DOUBLE_NAN.toRawBits())
+        assertEquals(floatNanBase, OTHER_FLOAT_NAN.toRawBits())
+        assertEquals(doubleNanBase, OTHER_DOUBLE_NAN.toRawBits())
     }
 }

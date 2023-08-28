@@ -525,9 +525,21 @@ public class FirPsiDiagnosticTestGenerated extends AbstractFirPsiDiagnosticTest 
         }
 
         @Test
+        @TestMetadata("properLocalPackages.kt")
+        public void testProperLocalPackages() throws Exception {
+            runTest("compiler/fir/analysis-tests/testData/resolve/properLocalPackages.kt");
+        }
+
+        @Test
         @TestMetadata("propertyFromJavaPlusAssign.kt")
         public void testPropertyFromJavaPlusAssign() throws Exception {
             runTest("compiler/fir/analysis-tests/testData/resolve/propertyFromJavaPlusAssign.kt");
+        }
+
+        @Test
+        @TestMetadata("propertyGetterWithoutType.kt")
+        public void testPropertyGetterWithoutType() throws Exception {
+            runTest("compiler/fir/analysis-tests/testData/resolve/propertyGetterWithoutType.kt");
         }
 
         @Test
@@ -1389,6 +1401,12 @@ public class FirPsiDiagnosticTestGenerated extends AbstractFirPsiDiagnosticTest 
             @TestMetadata("loops.kt")
             public void testLoops() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolve/cfg/loops.kt");
+            }
+
+            @Test
+            @TestMetadata("nestedClass.kt")
+            public void testNestedClass() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/cfg/nestedClass.kt");
             }
 
             @Test
@@ -3818,6 +3836,12 @@ public class FirPsiDiagnosticTestGenerated extends AbstractFirPsiDiagnosticTest 
             }
 
             @Test
+            @TestMetadata("incompleteWhen.kt")
+            public void testIncompleteWhen() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/problems/incompleteWhen.kt");
+            }
+
+            @Test
             @TestMetadata("innerClassHierarchy.kt")
             public void testInnerClassHierarchy() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolve/problems/innerClassHierarchy.kt");
@@ -3857,6 +3881,12 @@ public class FirPsiDiagnosticTestGenerated extends AbstractFirPsiDiagnosticTest 
             @TestMetadata("objectDerivedFromInnerClass.kt")
             public void testObjectDerivedFromInnerClass() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolve/problems/objectDerivedFromInnerClass.kt");
+            }
+
+            @Test
+            @TestMetadata("primaryConstructorParameterWithoutReturnType.kt")
+            public void testPrimaryConstructorParameterWithoutReturnType() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/problems/primaryConstructorParameterWithoutReturnType.kt");
             }
 
             @Test
@@ -6494,6 +6524,24 @@ public class FirPsiDiagnosticTestGenerated extends AbstractFirPsiDiagnosticTest 
             }
 
             @Test
+            @TestMetadata("genericGetterForJavaOverriddenProperty.kt")
+            public void testGenericGetterForJavaOverriddenProperty() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/j+k/genericGetterForJavaOverriddenProperty.kt");
+            }
+
+            @Test
+            @TestMetadata("genericGetterForJavaOverriddenProperty2.kt")
+            public void testGenericGetterForJavaOverriddenProperty2() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/j+k/genericGetterForJavaOverriddenProperty2.kt");
+            }
+
+            @Test
+            @TestMetadata("genericGetterForSyntheticProperty.kt")
+            public void testGenericGetterForSyntheticProperty() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/j+k/genericGetterForSyntheticProperty.kt");
+            }
+
+            @Test
             @TestMetadata("IntersectionTypesProblem.kt")
             public void testIntersectionTypesProblem() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/j+k/IntersectionTypesProblem.kt");
@@ -6853,6 +6901,12 @@ public class FirPsiDiagnosticTestGenerated extends AbstractFirPsiDiagnosticTest 
             @TestMetadata("localScopesInAnonymousObject.kt")
             public void testLocalScopesInAnonymousObject() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/problems/localScopesInAnonymousObject.kt");
+            }
+
+            @Test
+            @TestMetadata("malformedRawTypes.kt")
+            public void testMalformedRawTypes() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/problems/malformedRawTypes.kt");
             }
 
             @Test

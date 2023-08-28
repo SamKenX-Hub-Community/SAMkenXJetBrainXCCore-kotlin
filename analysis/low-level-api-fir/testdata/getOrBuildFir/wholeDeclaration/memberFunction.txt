@@ -6,3 +6,16 @@ FIR element rendered:
 public final [ResolvedTo(BODY_RESOLVE)] fun x(): R|kotlin/String| {
     ^x String()
 }
+
+FIR FILE:
+FILE: [ResolvedTo(IMPORTS)] memberFunction.kt
+    public final [ResolvedTo(STATUS)] class Y : R|kotlin/Any| {
+        public [ResolvedTo(STATUS)] [ContainingClassKey=Y] constructor(): R|Y| {
+            LAZY_super<R|kotlin/Any|>
+        }
+
+        public final [ResolvedTo(BODY_RESOLVE)] fun x(): R|kotlin/String| {
+            ^x String()
+        }
+
+    }

@@ -7,23 +7,23 @@ package org.jetbrains.kotlin.analysis.low.level.api.fir.lazy.resolve
 
 import org.jetbrains.kotlin.analysis.low.level.api.fir.LLFirModuleResolveComponents
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.FirDesignationWithFile
-import org.jetbrains.kotlin.analysis.low.level.api.fir.api.targets.LLFirClassWithAllMembersResolveTarget
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.targets.LLFirResolveTarget
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.targets.LLFirSingleResolveTarget
-import org.jetbrains.kotlin.analysis.low.level.api.fir.file.builder.InvalidSessionException
+import org.jetbrains.kotlin.analysis.low.level.api.fir.api.targets.LLFirWholeClassResolveTarget
+import org.jetbrains.kotlin.analysis.low.level.api.fir.api.targets.LLFirWholeFileResolveTarget
 import org.jetbrains.kotlin.analysis.low.level.api.fir.project.structure.llFirModuleData
 import org.jetbrains.kotlin.analysis.low.level.api.fir.sessions.llFirSession
 import org.jetbrains.kotlin.analysis.low.level.api.fir.transformers.LLFirLazyResolverRunner
 import org.jetbrains.kotlin.analysis.low.level.api.fir.transformers.withOnAirDesignation
 import org.jetbrains.kotlin.analysis.low.level.api.fir.util.checkCanceled
 import org.jetbrains.kotlin.analysis.low.level.api.fir.util.getContainingFile
-import org.jetbrains.kotlin.analysis.low.level.api.fir.util.withFirEntry
-import org.jetbrains.kotlin.analysis.utils.errors.rethrowExceptionWithDetails
+import org.jetbrains.kotlin.fir.utils.exceptions.withFirEntry
+import org.jetbrains.kotlin.utils.exceptions.rethrowExceptionWithDetails
 import org.jetbrains.kotlin.fir.FirElementWithResolveState
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.transformers.FirImportResolveTransformer
-import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.FirTowerDataContextCollector
+import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.FirResolveContextCollector
 import org.jetbrains.kotlin.fir.visitors.transformSingle
 
 internal class LLFirModuleLazyDeclarationResolver(val moduleComponents: LLFirModuleResolveComponents) {
@@ -42,7 +42,14 @@ internal class LLFirModuleLazyDeclarationResolver(val moduleComponents: LLFirMod
         toPhase: FirResolvePhase,
     ) {
         val fromPhase = target.resolvePhase
-        if (fromPhase >= toPhase) return
+
+        /**
+         * Currently [lazyResolve] on file means [LLFirWholeFileResolveTarget], but also [FirFile] itself
+         * has [resolvePhase] which does not match with the entire file resolution state.
+         * This additional [FirFile] condition can be dropped after KT-61296
+         */
+        if (target !is FirFile && fromPhase >= toPhase) return
+
         try {
             resolveContainingFileToImports(target)
             if (toPhase == FirResolvePhase.IMPORTS) return
@@ -101,9 +108,12 @@ internal class LLFirModuleLazyDeclarationResolver(val moduleComponents: LLFirMod
     fun lazyResolveTarget(
         target: LLFirResolveTarget,
         toPhase: FirResolvePhase,
-        towerDataContextCollector: FirTowerDataContextCollector?,
+        towerDataContextCollector: FirResolveContextCollector?,
     ) {
         try {
+            resolveFileToImportsWithLock(target.firFile)
+            if (toPhase == FirResolvePhase.IMPORTS) return
+
             lazyResolveTargets(
                 targets = listOf(target),
                 moduleComponents.scopeSessionProvider.getScopeSession(),
@@ -115,31 +125,35 @@ internal class LLFirModuleLazyDeclarationResolver(val moduleComponents: LLFirMod
         }
     }
 
-    fun runLazyDesignatedOnAirResolveToBodyWithoutLock(
+    /**
+     * Resolve on-air created declaration in a context of real [FirDesignationWithFile.firFile] and [FirDesignationWithFile.path].
+     * If target declaration is [FirFile] then the entire file will be resolved.
+     * The same for [FirRegularClass] if [resolvePhase] is [FirResolvePhase.BODY_RESOLVE].
+     */
+    fun runLazyDesignatedOnAirResolve(
         designation: FirDesignationWithFile,
-        onAirCreatedDeclaration: Boolean,
-        towerDataContextCollector: FirTowerDataContextCollector?,
+        towerDataContextCollector: FirResolveContextCollector?,
+        resolvePhase: FirResolvePhase = FirResolvePhase.BODY_RESOLVE,
     ) {
         resolveFileToImportsWithLock(designation.firFile)
 
-        val target = when (designation.target) {
-            is FirRegularClass -> LLFirClassWithAllMembersResolveTarget(designation.firFile, designation.path, designation.target)
+        val target = when {
+            designation.target is FirFile -> LLFirWholeFileResolveTarget(designation.firFile)
+            resolvePhase == FirResolvePhase.BODY_RESOLVE && designation.target is FirRegularClass -> {
+                LLFirWholeClassResolveTarget(designation.firFile, designation.path, designation.target)
+            }
+
             else -> LLFirSingleResolveTarget(designation.firFile, designation.path, designation.target)
         }
 
-        fun runTransformation() {
-            val scopeSession = ScopeSession()
-            lazyResolveTargets(listOf(target), scopeSession, FirResolvePhase.BODY_RESOLVE, towerDataContextCollector)
-        }
-
         try {
-            if (onAirCreatedDeclaration) {
-                withOnAirDesignation(designation, ::runTransformation)
-            } else {
-                runTransformation()
+            withOnAirDesignation(designation) {
+                // New session to avoid garbage in the original session
+                val scopeSession = ScopeSession()
+                lazyResolveTargets(listOf(target), scopeSession, resolvePhase, towerDataContextCollector)
             }
         } catch (e: Exception) {
-            handleExceptionFromResolve(e, target, FirResolvePhase.BODY_RESOLVE)
+            handleExceptionFromResolve(e, target, resolvePhase)
         }
     }
 
@@ -159,7 +173,7 @@ internal class LLFirModuleLazyDeclarationResolver(val moduleComponents: LLFirMod
         targets: List<LLFirResolveTarget>,
         scopeSession: ScopeSession,
         toPhase: FirResolvePhase,
-        towerDataContextCollector: FirTowerDataContextCollector?,
+        towerDataContextCollector: FirResolveContextCollector?,
     ) {
         if (targets.isEmpty()) return
         var currentPhase = getMinResolvePhase(targets).coerceAtLeast(FirResolvePhase.IMPORTS)
@@ -198,29 +212,27 @@ private fun handleExceptionFromResolve(
     exception: Exception,
     firDeclarationToResolve: FirElementWithResolveState,
     fromPhase: FirResolvePhase,
-    toPhase: FirResolvePhase?
+    toPhase: FirResolvePhase,
 ): Nothing {
-    if (exception is InvalidSessionException) {
-        throw exception
-    }
+    val session = firDeclarationToResolve.llFirSession
+    val moduleData = firDeclarationToResolve.llFirModuleData
+    val module = moduleData.ktModule
 
-    firDeclarationToResolve.llFirSession.invalidate()
     rethrowExceptionWithDetails(
         buildString {
-            val moduleData = firDeclarationToResolve.llFirModuleData
             appendLine("Error while resolving ${firDeclarationToResolve::class.java.name} ")
             appendLine("from $fromPhase to $toPhase")
             appendLine("current declaration phase ${firDeclarationToResolve.resolvePhase}")
             appendLine("origin: ${(firDeclarationToResolve as? FirDeclaration)?.origin}")
-            appendLine("session: ${firDeclarationToResolve.llFirSession::class}")
+            appendLine("session: ${session::class}")
             appendLine("module data: ${moduleData::class}")
-            appendLine("KtModule: ${moduleData.ktModule::class}")
-            appendLine("platform: ${moduleData.ktModule.platform}")
+            appendLine("KtModule: ${module::class}")
+            appendLine("platform: ${module.platform}")
         },
         exception = exception,
     ) {
-        withEntry("KtModule", firDeclarationToResolve.llFirModuleData.ktModule) { it.moduleDescription }
-        withEntry("session", firDeclarationToResolve.llFirSession) { it.toString() }
+        withEntry("KtModule", module) { it.moduleDescription }
+        withEntry("session", session) { it.toString() }
         withEntry("moduleData", firDeclarationToResolve.moduleData) { it.toString() }
         withFirEntry("firDeclarationToResolve", firDeclarationToResolve)
     }
@@ -229,27 +241,24 @@ private fun handleExceptionFromResolve(
 private fun handleExceptionFromResolve(
     exception: Exception,
     designation: LLFirResolveTarget,
-    toPhase: FirResolvePhase?
+    toPhase: FirResolvePhase,
 ): Nothing {
-    if (exception is InvalidSessionException) {
-        throw exception
-    }
+    val session = designation.firFile.llFirSession
+    val moduleData = session.llFirModuleData
+    val module = moduleData.ktModule
 
-    val llFirSession = designation.firFile.llFirSession
-    llFirSession.invalidate()
-    val moduleData = llFirSession.llFirModuleData
     rethrowExceptionWithDetails(
         buildString {
             appendLine("Error while resolving ${designation::class.java.name} ")
             appendLine("to $toPhase")
             appendLine("module data: ${moduleData::class}")
-            appendLine("KtModule: ${moduleData.ktModule::class}")
-            appendLine("platform: ${moduleData.ktModule.platform}")
+            appendLine("KtModule: ${module::class}")
+            appendLine("platform: ${module.platform}")
         },
         exception = exception,
     ) {
-        withEntry("KtModule", moduleData.ktModule) { it.moduleDescription }
-        withEntry("session", designation.firFile.llFirSession) { it.toString() }
+        withEntry("KtModule", module) { it.moduleDescription }
+        withEntry("session", session) { it.toString() }
         withEntry("moduleData", moduleData) { it.toString() }
         withEntry("firDesignationToResolve", designation) { it.toString() }
     }

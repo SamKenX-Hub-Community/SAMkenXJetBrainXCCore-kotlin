@@ -11,13 +11,17 @@ import org.jetbrains.kotlin.backend.konan.ir.parentDeclarationsWithSelf
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.descriptors.IrBasedClassConstructorDescriptor
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.types.classOrNull
 import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.name.NativeForwardDeclarationKind
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.name.NativeStandardInteropNames
+import org.jetbrains.kotlin.native.interop.ObjCMethodInfo
 import org.jetbrains.kotlin.resolve.ExternalOverridabilityCondition
 import org.jetbrains.kotlin.resolve.constants.BooleanValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
@@ -28,15 +32,14 @@ import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.typeUtil.supertypes
 
 internal val interopPackageName = InteropFqNames.packageName
-internal val objCObjectFqName = interopPackageName.child(Name.identifier("ObjCObject"))
+internal val objCObjectFqName = NativeStandardInteropNames.objCObjectClassId.asSingleFqName()
 private val objCClassFqName = interopPackageName.child(Name.identifier("ObjCClass"))
 private val objCProtocolFqName = interopPackageName.child(Name.identifier("ObjCProtocol"))
-internal val externalObjCClassFqName = interopPackageName.child(Name.identifier("ExternalObjCClass"))
-internal val objCDirectFqName = interopPackageName.child(Name.identifier("ObjCDirect"))
-internal val objCMethodFqName = interopPackageName.child(Name.identifier("ObjCMethod"))
-internal val objCConstructorFqName = FqName("kotlinx.cinterop.ObjCConstructor")
-internal val objCFactoryFqName = interopPackageName.child(Name.identifier("ObjCFactory"))
-private val objcnamesForwardDeclarationsPackageName = Name.identifier("objcnames")
+internal val externalObjCClassFqName = NativeStandardInteropNames.externalObjCClassClassId.asSingleFqName()
+internal val objCDirectFqName = NativeStandardInteropNames.objCDirectClassId.asSingleFqName()
+internal val objCMethodFqName = NativeStandardInteropNames.objCMethodClassId.asSingleFqName()
+internal val objCConstructorFqName = NativeStandardInteropNames.objCConstructorClassId.asSingleFqName()
+internal val objCFactoryFqName = NativeStandardInteropNames.objCFactoryClassId.asSingleFqName()
 
 fun ClassDescriptor.isObjCClass(): Boolean =
                 this.containingDeclaration.fqNameSafe != interopPackageName &&
@@ -63,8 +66,16 @@ fun IrClass.isExternalObjCClass(): Boolean = this.isObjCClass() &&
             it.annotations.hasAnnotation(externalObjCClassFqName)
         }
 
-fun ClassDescriptor.isObjCForwardDeclaration(): Boolean =
-        this.findPackage().fqName.startsWith(objcnamesForwardDeclarationsPackageName)
+fun ClassDescriptor.isObjCForwardDeclaration(): Boolean = when (NativeForwardDeclarationKind.packageFqNameToKind[findPackage().fqName]) {
+    null, NativeForwardDeclarationKind.Struct -> false
+    NativeForwardDeclarationKind.ObjCProtocol, NativeForwardDeclarationKind.ObjCClass -> true
+}
+
+fun IrClass.isObjCForwardDeclaration(): Boolean = when (NativeForwardDeclarationKind.packageFqNameToKind[getPackageFragment().packageFqName]) {
+    null, NativeForwardDeclarationKind.Struct -> false
+    NativeForwardDeclarationKind.ObjCProtocol, NativeForwardDeclarationKind.ObjCClass -> true
+}
+
 
 fun ClassDescriptor.isObjCMetaClass(): Boolean = this.getAllSuperClassifiers().any {
     it.fqNameSafe == objCClassFqName
@@ -102,11 +113,6 @@ fun ClassDescriptor.isKotlinObjCClass(): Boolean = this.isObjCClass() && !this.i
 
 fun IrClass.isKotlinObjCClass(): Boolean = this.isObjCClass() && !this.isExternalObjCClass()
 
-
-data class ObjCMethodInfo(val selector: String,
-                          val encoding: String,
-                          val isStret: Boolean,
-                          val directSymbol: String?)
 
 private fun FunctionDescriptor.decodeObjCMethodAnnotation(): ObjCMethodInfo? {
     assert (this.kind.isReal)
@@ -180,7 +186,7 @@ private fun IrSimpleFunction.getObjCMethodInfo(onlyExternal: Boolean): ObjCMetho
     }
 
     return overriddenSymbols.firstNotNullOfOrNull {
-        assert(it.owner != this) { "Function ${it.owner.descriptor.fqNameSafe}() is wrongly contained in its own overriddenSymbols"}
+        assert(it.owner != this) { "Function ${it.owner.fqNameWhenAvailable}() is wrongly contained in its own overriddenSymbols"}
         it.owner.getObjCMethodInfo(onlyExternal)
     }
 }
@@ -290,6 +296,7 @@ fun IrConstructor.getObjCInitMethod(): IrSimpleFunction? {
     }
 }
 
+@ObsoleteDescriptorBasedAPI
 fun ConstructorDescriptor.getObjCInitMethod(): FunctionDescriptor? {
     if (this is IrBasedClassConstructorDescriptor) {
         // E.g. in case of K2.
@@ -341,13 +348,13 @@ fun inferObjCSelector(descriptor: FunctionDescriptor): String = if (descriptor.v
     }
 }
 
-fun ClassDescriptor.getExternalObjCClassBinaryName(): String =
+fun IrClass.getExternalObjCClassBinaryName(): String =
         this.getExplicitExternalObjCClassBinaryName()
                 ?: this.name.asString()
 
-fun ClassDescriptor.getExternalObjCMetaClassBinaryName(): String =
+fun IrClass.getExternalObjCMetaClassBinaryName(): String =
         this.getExplicitExternalObjCClassBinaryName()
                 ?: this.name.asString().removeSuffix("Meta")
 
-private fun ClassDescriptor.getExplicitExternalObjCClassBinaryName() =
-        this.annotations.findAnnotation(externalObjCClassFqName)!!.getStringValueOrNull("binaryName")
+private fun IrClass.getExplicitExternalObjCClassBinaryName() =
+        this.annotations.findAnnotation(externalObjCClassFqName)!!.getAnnotationValueOrNull<String>("binaryName")

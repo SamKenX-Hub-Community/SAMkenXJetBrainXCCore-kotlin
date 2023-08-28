@@ -11,8 +11,9 @@ import org.jetbrains.kotlin.backend.jvm.JvmSymbols
 import org.jetbrains.kotlin.backend.jvm.ir.hasPlatformDependent
 import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
+import org.jetbrains.kotlin.fir.backend.FirMangler
+import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.fir.backend.FirMetadataSource
-import org.jetbrains.kotlin.fir.signaturer.FirMangler
 import org.jetbrains.kotlin.ir.IrBuiltIns
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
@@ -24,6 +25,7 @@ import org.jetbrains.kotlin.ir.types.classOrNull
 import org.jetbrains.kotlin.ir.types.isUnit
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.load.java.JvmAnnotationNames
+import org.jetbrains.kotlin.load.java.lazy.descriptors.isJavaField
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.test.TargetBackend
@@ -33,6 +35,7 @@ import org.jetbrains.kotlin.test.directives.CodegenTestDirectives.DUMP_LOCAL_DEC
 import org.jetbrains.kotlin.test.directives.CodegenTestDirectives.DUMP_SIGNATURES
 import org.jetbrains.kotlin.test.directives.CodegenTestDirectives.MUTE_SIGNATURE_COMPARISON_K2
 import org.jetbrains.kotlin.test.directives.CodegenTestDirectives.SKIP_SIGNATURE_DUMP
+import org.jetbrains.kotlin.test.model.BackendKind
 import org.jetbrains.kotlin.test.model.FrontendKinds
 import org.jetbrains.kotlin.test.model.TestModule
 import org.jetbrains.kotlin.test.services.TestServices
@@ -90,7 +93,10 @@ private const val CHECK_MARKER = "// CHECK"
  *      any backends, we print the actual mangled name and signature for this declaration.
  *    - Otherwise, we print the parsed `// CHECK` block as is.
  */
-class IrMangledNameAndSignatureDumpHandler(testServices: TestServices) : AbstractIrHandler(testServices) {
+class IrMangledNameAndSignatureDumpHandler(
+    testServices: TestServices,
+    artifactKind: BackendKind<IrBackendInput>,
+) : AbstractIrHandler(testServices, artifactKind) {
 
     companion object {
         const val DUMP_EXTENSION = "sig.kt.txt"
@@ -174,13 +180,25 @@ class IrMangledNameAndSignatureDumpHandler(testServices: TestServices) : Abstrac
         private val IrDeclaration.isMainFunction: Boolean
             get() = isTopLevel && this is IrSimpleFunction && name.asString() == "main"
 
+        @ObsoleteDescriptorBasedAPI
         private val IrDeclaration.potentiallyHasDifferentMangledNamesDependingOnBackend: Boolean
             get() = isMainFunction ||
                     isFunctionWithNonUnitReturnType ||
+                    (symbol.descriptor as? PropertyDescriptor)?.isJavaField == true ||
                     parent.let { it is IrDeclaration && it.potentiallyHasDifferentMangledNamesDependingOnBackend }
 
         private fun IrSimpleFunction.isHiddenEnumMethod() = allOverridden(includeSelf = true).any {
             it.dispatchReceiverParameter?.type?.classOrNull == irBuiltIns.enumClass && it.name in HIDDEN_ENUM_METHOD_NAMES
+        }
+
+        private fun Printer.printCheckMarkerForNewDeclaration() {
+            printlnCheckMarker(
+                when (targetBackend) {
+                    // In most cases the mangled names and signatures generated for JS are the same as for Native.
+                    TargetBackend.JS_IR, TargetBackend.NATIVE -> listOf(TargetBackend.JS_IR, TargetBackend.NATIVE)
+                    else -> listOf(targetBackend)
+                }
+            )
         }
 
         @OptIn(ObsoleteDescriptorBasedAPI::class)
@@ -199,15 +217,22 @@ class IrMangledNameAndSignatureDumpHandler(testServices: TestServices) : Abstrac
                 )
             }
 
+            fun IdSignature.print(name: String) {
+                val commentPrefix = "//   "
+                // N.B. We do use IdSignatureRenderer.LEGACY because it renders public signatures with hashes which are
+                // computed from mangled names. So no real need in testing IdSignatureRenderer.DEFAULT which renders mangled names
+                // instead of hashes.
+                println(commentPrefix, name, ": ", render(IdSignatureRenderer.LEGACY))
+                asPublic()?.description?.let {
+                    println(commentPrefix, name, " debug description: ", it)
+                }
+            }
+
             fun printActualMangledNamesAndSignatures() {
                 printMangledNames(computedMangledNames)
 
-                symbol.signature?.let {
-                    println("//   Public signature: ${it.render()}")
-                }
-                symbol.privateSignature?.let {
-                    println("//   Private signature: ${it.render()}")
-                }
+                symbol.signature?.print("Public signature")
+                symbol.privateSignature?.print("Private signature")
             }
 
             var printedActualMangledNameAndSignature = false
@@ -224,8 +249,9 @@ class IrMangledNameAndSignatureDumpHandler(testServices: TestServices) : Abstrac
                         checkBlock.expectations.forEach(this::println)
                     }
                 }
+                // No `// CHECK` block found for the current backend.
                 if (!printedActualMangledNameAndSignature) {
-                    printlnCheckMarker(listOf(targetBackend))
+                    printCheckMarkerForNewDeclaration()
                     printActualMangledNamesAndSignatures()
                 }
             } else {
@@ -233,7 +259,7 @@ class IrMangledNameAndSignatureDumpHandler(testServices: TestServices) : Abstrac
                     // This is a heuristic to print `// CHECK <backend>:` instead of just `// CHECK:` for new declarations
                     // for which the difference between backend-specific manglers is known to take place.
                     // This is purely for convenience when adding a new test.
-                    printlnCheckMarker(listOf(targetBackend))
+                    printCheckMarkerForNewDeclaration()
                 } else {
                     printlnCheckMarker(emptyList())
                 }

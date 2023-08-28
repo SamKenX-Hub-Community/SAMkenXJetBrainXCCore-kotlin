@@ -42,7 +42,7 @@ where advanced options include:
   -Xjava-source-roots=<path> Paths to directories with Java source files
   -Xjavac-arguments=<option[,]> Java compiler arguments
   -Xjdk-release=<version>    Compile against the specified JDK API version, similarly to javac's `-release`. Requires JDK 9 or newer.
-                             Supported versions depend on the used JDK; for JDK 17+ supported versions are 1.8, 9, 10, ..., 20.
+                             Supported versions depend on the used JDK; for JDK 17+ supported versions are 1.8, 9, 10, ..., 21.
                              Also sets `-jvm-target` value equal to the selected JDK version
   -Xjspecify-annotations=ignore|strict|warn
                              Specify behavior for jspecify annotations.
@@ -143,6 +143,7 @@ where advanced options include:
                              See KT-45671 for more details
   -Xuse-fast-jar-file-system Use fast implementation on Jar FS. This may speed up compilation time, but currently it's an experimental mode
   -Xuse-javac                Use javac for Java source and class files analysis
+  -Xuse-kapt4                Enable the experimental KAPT 4.
   -Xuse-old-backend          Use the old JVM backend
   -Xuse-old-class-files-reading Use old class files reading implementation. This may slow down the build and cause problems with Groovy interop.
                              Should be used in case of problems with the new implementation
@@ -167,6 +168,8 @@ where advanced options include:
                              Do not enable scripting plugin by default
   -Xdisable-phases           Disable backend phases
   -Xdisable-ultra-light-classes Do not use the ultra light classes implementation
+  -Xdont-warn-on-error-suppression
+                             Don't report a warning when an error is suppressed. Only affects K2.
   -Xdump-directory           Dump backend state into directory
   -Xdump-fqname              FqName of declaration that should be dumped
   -Xdump-perf=<path>         Dump detailed performance statistics to the specified file
@@ -226,7 +229,7 @@ where advanced options include:
                              Eliminate builder inference restrictions like allowance of returning type variables of a builder inference call
   -Xuse-fir-extended-checkers Use extended analysis mode based on Front-end IR. Warning: this feature is far from being production-ready
   -Xuse-fir-ic               Compile using Front-end IR internal incremental compilation cycle. Warning: this feature is far from being production-ready
-  -Xuse-fir-lt               Compile using LightTree parser with Front-end IR. Warning: this feature is far from being production-ready
+  -Xuse-fir-lt               Compile using LightTree parser with Front-end IR
   -Xuse-k2                   Compile using experimental K2. K2 is a new compiler pipeline, no compatibility guarantees are yet provided
   -Xuse-mixed-named-arguments Enable Support named arguments in their own position even if the result appears as mixed
   -Xverbose-phases           Be verbose while performing these backend phases

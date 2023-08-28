@@ -23,8 +23,9 @@ import org.jetbrains.kotlin.test.frontend.classic.handlers.ClassicDiagnosticsHan
 import org.jetbrains.kotlin.test.frontend.fir.handlers.FirDiagnosticsHandler
 import org.jetbrains.kotlin.test.model.*
 import org.jetbrains.kotlin.test.runners.AbstractKotlinCompilerWithTargetBackendTest
+import org.jetbrains.kotlin.test.runners.codegen.actualizersAndPluginsFacadeStepIfNeeded
 import org.jetbrains.kotlin.test.runners.codegen.commonClassicFrontendHandlersForCodegenTest
-import org.jetbrains.kotlin.test.services.JsLibraryProvider
+import org.jetbrains.kotlin.test.services.LibraryProvider
 import org.jetbrains.kotlin.test.services.configuration.CommonEnvironmentConfigurator
 import org.jetbrains.kotlin.test.services.configuration.JsEnvironmentConfigurator
 import org.jetbrains.kotlin.test.services.sourceProviders.CoroutineHelpersSourceFilesProvider
@@ -136,7 +137,7 @@ fun <
         ::JsEnvironmentConfigurator,
     )
 
-    useAdditionalService(::JsLibraryProvider)
+    useAdditionalService(::LibraryProvider)
 
     useAfterAnalysisCheckers(
         ::JsFailingTestSuppressor,
@@ -154,6 +155,7 @@ fun <
     }
 
     facadeStep(frontendToBackendConverter)
+    actualizersAndPluginsFacadeStepIfNeeded(targetFrontend)
     irHandlersStep()
 
     facadeStep(backendFacade)

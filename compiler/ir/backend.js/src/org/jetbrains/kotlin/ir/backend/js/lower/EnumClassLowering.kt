@@ -126,8 +126,11 @@ class EnumClassConstructorLowering(val context: JsCommonBackendContext) : Declar
                 old.valueParameter = new
 
                 old.defaultValue?.let { default ->
-                    new.defaultValue = context.irFactory.createExpressionBody(default.startOffset, default.endOffset) {
+                    new.defaultValue = context.irFactory.createExpressionBody(
+                        startOffset = default.startOffset,
+                        endOffset = default.endOffset,
                         expression = default.expression
+                    ).apply {
                         expression.patchDeclarationParents(newConstructor)
                         context.fixReferencesToConstructorParameters(enumClass, this)
                     }
@@ -336,10 +339,10 @@ class EnumEntryInstancesBodyLowering(val context: JsCommonBackendContext) : Body
             if (enum.isInstantiableEnum) {
                 val entry = enum.declarations.findIsInstanceAnd<IrEnumEntry> { it.correspondingClass === entryClass }!!
 
-                //In ES6 using `this` before superCall is unavailable, so
-                //need to find superCall and put `instance = this` after it
+                // In ES6 using `this` before superCall is unavailable, so
+                // need to find superCall and put `instance = this` after it
                 val index = (irBody as IrBlockBody).statements
-                    .indexOfFirst { it is IrTypeOperatorCall && it.argument is IrDelegatingConstructorCall } + 1
+                    .indexOfFirst { it is IrDelegatingConstructorCall || it is IrTypeOperatorCall && it.argument is IrDelegatingConstructorCall } + 1
 
                 irBody.statements.add(index, context.createIrBuilder(container.symbol).run {
                     irSetField(null, entry.correspondingField!!, irGet(entryClass.thisReceiver!!))
@@ -501,7 +504,7 @@ class EnumSyntheticFunctionsAndPropertiesLowering(
         return null
     }
 
-    private val throwISESymbol = context.ir.symbols.throwISE
+    private val throwIAESymbol = context.ir.symbols.throwIAE
 
     private fun createEnumEntriesBody(entriesGetter: IrFunction, enumClass: IrClass): IrBlockBody {
         val entriesField = enumClass.buildEntriesField()
@@ -548,7 +551,9 @@ class EnumSyntheticFunctionsAndPropertiesLowering(
                         )
                     } memoryOptimizedPlus irElseBranch(irBlock {
                         +irCall(irClass.initEntryInstancesFun!!)
-                        +irCall(throwISESymbol)
+                        +irCall(throwIAESymbol).apply {
+                            putValueArgument(0, irString("No enum constant ${nameParameter.name.identifier}."))
+                        }
                     })
                 )
             }

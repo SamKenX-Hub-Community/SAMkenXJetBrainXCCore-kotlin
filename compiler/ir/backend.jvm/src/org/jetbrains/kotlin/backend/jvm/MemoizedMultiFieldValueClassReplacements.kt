@@ -277,9 +277,12 @@ class MemoizedMultiFieldValueClassReplacements(
                         createStaticReplacement(function)
                 }
 
-                function is IrSimpleFunction && !function.isFromJava() && function.fullValueParameterList.any { it.type.needsMfvcFlattening() } && run {
+                function is IrSimpleFunction
+                        && !(function.isFromJava() && function.overridesOnlyMethodsFromJava())
+                        && function.fullValueParameterList.any { it.type.needsMfvcFlattening() }
+                        && run {
                     if (!function.isFakeOverride) return@run true
-                    val superDeclaration = findSuperDeclaration(function, false, context.state.jvmDefaultMode)
+                    val superDeclaration = findSuperDeclaration(function, false, context.config.jvmDefaultMode)
                     getReplacementFunction(superDeclaration) != null
                 } -> createMethodReplacement(function)
 

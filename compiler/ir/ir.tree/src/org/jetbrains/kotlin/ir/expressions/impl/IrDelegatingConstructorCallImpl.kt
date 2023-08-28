@@ -22,6 +22,7 @@ import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
 import org.jetbrains.kotlin.ir.expressions.typeParametersCount
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
+import org.jetbrains.kotlin.ir.symbols.IrSymbolInternals
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.util.allTypeParameters
 import org.jetbrains.kotlin.ir.util.initializeParameterArguments
@@ -31,7 +32,7 @@ class IrDelegatingConstructorCallImpl(
     override val startOffset: Int,
     override val endOffset: Int,
     override var type: IrType,
-    override val symbol: IrConstructorSymbol,
+    override var symbol: IrConstructorSymbol,
     typeArgumentsCount: Int,
     valueArgumentsCount: Int,
 ) : IrDelegatingConstructorCall() {
@@ -54,6 +55,7 @@ class IrDelegatingConstructorCallImpl(
             valueArgumentsCount: Int = symbol.descriptor.valueParameters.size + symbol.descriptor.contextReceiverParameters.size
         ) = IrDelegatingConstructorCallImpl(startOffset, endOffset, type, symbol, typeArgumentsCount, valueArgumentsCount)
 
+        @IrSymbolInternals
         fun fromSymbolOwner(
             startOffset: Int,
             endOffset: Int,

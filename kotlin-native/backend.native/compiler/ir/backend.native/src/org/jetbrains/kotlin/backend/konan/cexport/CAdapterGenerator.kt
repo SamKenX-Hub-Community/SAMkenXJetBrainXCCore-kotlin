@@ -10,10 +10,10 @@ import org.jetbrains.kotlin.backend.common.pop
 import org.jetbrains.kotlin.backend.common.push
 import org.jetbrains.kotlin.backend.konan.*
 import org.jetbrains.kotlin.backend.konan.driver.phases.PsiToIrContext
-import org.jetbrains.kotlin.config.CommonConfigurationKeys.USE_FIR
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.util.referenceFunction
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
@@ -119,6 +119,7 @@ internal class ExportedElementScope(val kind: ScopeKind, val name: String) {
     }
 }
 
+@OptIn(ObsoleteDescriptorBasedAPI::class)
 internal class ExportedElement(
         val kind: ElementKind,
         val scope: ExportedElementScope,
@@ -158,8 +159,8 @@ internal class ExportedElement(
 
     val irSymbol = when {
         isFunction -> owner.symbolTable.referenceFunction(declaration as FunctionDescriptor)
-        isClass -> owner.symbolTable.referenceClass(declaration as ClassDescriptor)
-        isEnumEntry -> owner.symbolTable.referenceEnumEntry(declaration as ClassDescriptor)
+        isClass -> owner.symbolTable.descriptorExtension.referenceClass(declaration as ClassDescriptor)
+        isEnumEntry -> owner.symbolTable.descriptorExtension.referenceEnumEntry(declaration as ClassDescriptor)
         else -> error("unexpected $kind element: $declaration")
     }
 

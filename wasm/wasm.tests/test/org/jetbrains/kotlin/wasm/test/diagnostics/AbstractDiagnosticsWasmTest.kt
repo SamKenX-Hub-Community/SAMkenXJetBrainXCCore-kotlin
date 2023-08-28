@@ -11,14 +11,14 @@ import org.jetbrains.kotlin.test.builders.classicFrontendHandlersStep
 import org.jetbrains.kotlin.test.builders.classicFrontendStep
 import org.jetbrains.kotlin.test.directives.JvmEnvironmentConfigurationDirectives
 import org.jetbrains.kotlin.test.frontend.classic.handlers.ClassicDiagnosticsHandler
-import org.jetbrains.kotlin.test.frontend.classic.handlers.DeclarationsDumpHandler
 import org.jetbrains.kotlin.test.frontend.classic.handlers.OldNewInferenceMetaInfoProcessor
 import org.jetbrains.kotlin.test.model.DependencyKind
 import org.jetbrains.kotlin.test.model.FrontendKinds
 import org.jetbrains.kotlin.test.runners.AbstractKotlinCompilerTest
-import org.jetbrains.kotlin.test.services.JsLibraryProvider
+import org.jetbrains.kotlin.test.services.LibraryProvider
 import org.jetbrains.kotlin.test.services.configuration.CommonEnvironmentConfigurator
 import org.jetbrains.kotlin.test.services.configuration.WasmEnvironmentConfigurator
+import org.jetbrains.kotlin.test.services.configuration.WasmEnvironmentConfiguratorJs
 import org.jetbrains.kotlin.test.services.sourceProviders.AdditionalDiagnosticsSourceFilesProvider
 import org.jetbrains.kotlin.test.services.sourceProviders.CoroutineHelpersSourceFilesProvider
 
@@ -38,7 +38,7 @@ abstract class AbstractDiagnosticsWasmTest : AbstractKotlinCompilerTest() {
 
         useConfigurators(
             ::CommonEnvironmentConfigurator,
-            ::WasmEnvironmentConfigurator,
+            ::WasmEnvironmentConfiguratorJs,
         )
 
         useMetaInfoProcessors(::OldNewInferenceMetaInfoProcessor)
@@ -46,7 +46,7 @@ abstract class AbstractDiagnosticsWasmTest : AbstractKotlinCompilerTest() {
             ::AdditionalDiagnosticsSourceFilesProvider,
             ::CoroutineHelpersSourceFilesProvider,
         )
-        useAdditionalService(::JsLibraryProvider)
+        useAdditionalService(::LibraryProvider)
 
         classicFrontendStep()
         classicFrontendHandlersStep {

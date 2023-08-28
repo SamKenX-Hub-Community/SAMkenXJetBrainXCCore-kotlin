@@ -19,52 +19,19 @@ import org.jetbrains.kotlin.ir.declarations.impl.IrFactoryImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrVariableImpl
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
-import org.jetbrains.kotlin.ir.interpreter.state.Complex
-import org.jetbrains.kotlin.ir.interpreter.state.ExceptionState
-import org.jetbrains.kotlin.ir.interpreter.state.Primitive
-import org.jetbrains.kotlin.ir.interpreter.state.State
 import org.jetbrains.kotlin.ir.symbols.impl.IrClassSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrSimpleFunctionSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrVariableSymbolImpl
 import org.jetbrains.kotlin.ir.types.*
-import org.jetbrains.kotlin.ir.util.SYNTHETIC_OFFSET
-import org.jetbrains.kotlin.ir.util.constructors
-import org.jetbrains.kotlin.ir.util.defaultType
-import org.jetbrains.kotlin.ir.util.render
+import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.name.Name
 
 internal val TEMP_CLASS_FOR_INTERPRETER = object : IrDeclarationOriginImpl("TEMP_CLASS_FOR_INTERPRETER") {}
 internal val TEMP_FUNCTION_FOR_INTERPRETER = object : IrDeclarationOriginImpl("TEMP_FUNCTION_FOR_INTERPRETER") {}
 
-private fun Any?.toIrConstOrNull(irType: IrType, startOffset: Int = SYNTHETIC_OFFSET, endOffset: Int = SYNTHETIC_OFFSET): IrConst<*>? {
-    if (this == null) return IrConstImpl.constNull(startOffset, endOffset, irType)
-
-    val constType = irType.makeNotNull().removeAnnotations()
-    return when (irType.getPrimitiveType()) {
-        PrimitiveType.BOOLEAN -> IrConstImpl.boolean(startOffset, endOffset, constType, this as Boolean)
-        PrimitiveType.CHAR -> IrConstImpl.char(startOffset, endOffset, constType, this as Char)
-        PrimitiveType.BYTE -> IrConstImpl.byte(startOffset, endOffset, constType, (this as Number).toByte())
-        PrimitiveType.SHORT -> IrConstImpl.short(startOffset, endOffset, constType, (this as Number).toShort())
-        PrimitiveType.INT -> IrConstImpl.int(startOffset, endOffset, constType, (this as Number).toInt())
-        PrimitiveType.FLOAT -> IrConstImpl.float(startOffset, endOffset, constType, (this as Number).toFloat())
-        PrimitiveType.LONG -> IrConstImpl.long(startOffset, endOffset, constType, (this as Number).toLong())
-        PrimitiveType.DOUBLE -> IrConstImpl.double(startOffset, endOffset, constType, (this as Number).toDouble())
-        null -> when (constType.getUnsignedType()) {
-            UnsignedType.UBYTE -> IrConstImpl.byte(startOffset, endOffset, constType, (this as Number).toByte())
-            UnsignedType.USHORT -> IrConstImpl.short(startOffset, endOffset, constType, (this as Number).toShort())
-            UnsignedType.UINT -> IrConstImpl.int(startOffset, endOffset, constType, (this as Number).toInt())
-            UnsignedType.ULONG -> IrConstImpl.long(startOffset, endOffset, constType, (this as Number).toLong())
-            null -> when {
-                constType.isString() -> IrConstImpl.string(startOffset, endOffset, constType, this as String)
-                else -> null
-            }
-        }
-    }
-}
-
+@Deprecated("Please migrate to `org.jetbrains.kotlin.ir.util.toIrConst`", level = DeprecationLevel.HIDDEN)
 fun Any?.toIrConst(irType: IrType, startOffset: Int = SYNTHETIC_OFFSET, endOffset: Int = SYNTHETIC_OFFSET): IrConst<*> =
-    toIrConstOrNull(irType, startOffset, endOffset)
-        ?: throw UnsupportedOperationException("Unsupported const element type ${irType.makeNotNull().render()}")
+    toIrConst(irType, startOffset, endOffset)
 
 internal fun IrFunction.createCall(origin: IrStatementOrigin? = null): IrCall {
     this as IrSimpleFunction
@@ -100,16 +67,35 @@ internal fun createTempFunction(
     origin: IrDeclarationOrigin = TEMP_FUNCTION_FOR_INTERPRETER,
     visibility: DescriptorVisibility = DescriptorVisibilities.PUBLIC
 ): IrSimpleFunction {
-    return IrFactoryImpl.createFunction(
-        SYNTHETIC_OFFSET, SYNTHETIC_OFFSET, origin, IrSimpleFunctionSymbolImpl(), name, visibility, Modality.FINAL, type,
-        isInline = false, isExternal = false, isTailrec = false, isSuspend = false, isOperator = true, isInfix = false, isExpect = false
+    return IrFactoryImpl.createSimpleFunction(
+        startOffset = SYNTHETIC_OFFSET,
+        endOffset = SYNTHETIC_OFFSET,
+        origin = origin,
+        name = name,
+        visibility = visibility,
+        isInline = false,
+        isExpect = false,
+        returnType = type,
+        modality = Modality.FINAL,
+        symbol = IrSimpleFunctionSymbolImpl(),
+        isTailrec = false,
+        isSuspend = false,
+        isOperator = true,
+        isInfix = false,
+        isExternal = false,
     )
 }
 
 internal fun createTempClass(name: Name, origin: IrDeclarationOrigin = TEMP_CLASS_FOR_INTERPRETER): IrClass {
     return IrFactoryImpl.createClass(
-        SYNTHETIC_OFFSET, SYNTHETIC_OFFSET, origin, IrClassSymbolImpl(), name,
-        ClassKind.CLASS, DescriptorVisibilities.PRIVATE, Modality.FINAL
+        startOffset = SYNTHETIC_OFFSET,
+        endOffset = SYNTHETIC_OFFSET,
+        origin = origin,
+        name = name,
+        visibility = DescriptorVisibilities.PRIVATE,
+        symbol = IrClassSymbolImpl(),
+        kind = ClassKind.CLASS,
+        modality = Modality.FINAL,
     )
 }
 
@@ -185,6 +171,8 @@ internal fun IrBuiltIns.emptyArrayConstructor(arrayType: IrType): IrConstructorC
 }
 
 internal fun IrConst<*>.toConstantValue(): ConstantValue<*> {
+    if (value == null) return NullValue
+
     val constType = this.type.makeNotNull().removeAnnotations()
     return when (this.type.getPrimitiveType()) {
         PrimitiveType.BOOLEAN -> BooleanValue(this.value as Boolean)

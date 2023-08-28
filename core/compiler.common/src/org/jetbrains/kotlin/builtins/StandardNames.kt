@@ -31,12 +31,18 @@ object StandardNames {
     @JvmField val DATA_CLASS_COMPONENT_PREFIX = "component"
 
     @JvmField val HASHCODE_NAME = Name.identifier("hashCode")
+    @JvmField val TO_STRING_NAME = Name.identifier("toString")
+    @JvmField val EQUALS_NAME = Name.identifier("equals")
 
     @JvmField val CHAR_CODE = Name.identifier("code")
 
     @JvmField val NAME = Name.identifier("name")
 
+    @JvmField val MAIN = Name.identifier("main")
+
     @JvmField val NEXT_CHAR = Name.identifier("nextChar")
+
+    @JvmField val IMPLICIT_LAMBDA_PARAMETER_NAME = Name.identifier("it")
 
     @JvmField val CONTEXT_FUNCTION_TYPE_PARAMETER_COUNT_NAME = Name.identifier("count")
 
@@ -164,6 +170,7 @@ object StandardNames {
         @JvmField val mutableMapEntry: FqName = mutableMap.child(Name.identifier("MutableEntry"))
 
         @JvmField val kClass: FqNameUnsafe = reflect("KClass")
+        @JvmField val kType: FqNameUnsafe = reflect("KType")
         @JvmField val kCallable: FqNameUnsafe = reflect("KCallable")
         @JvmField val kProperty0: FqNameUnsafe = reflect("KProperty0")
         @JvmField val kProperty1: FqNameUnsafe = reflect("KProperty1")

@@ -110,7 +110,11 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
             node, parameters, info, FieldRemapper(null, null, parameters), sourceCompiler.isCallInsideSameModuleAsCallee,
             "Method inlining " + sourceCompiler.callElementText,
             SourceMapCopier(sourceMapper, nodeAndSmap.classSMAP, callSite),
-            info.callSiteInfo, isInlineOnly, !isInlinedToInlineFunInKotlinRuntime(), maskStartIndex, maskStartIndex + maskValues.size,
+            info.callSiteInfo,
+            isInlineOnlyMethod = isInlineOnly,
+            !isInlinedToInlineFunInKotlinRuntime(),
+            maskStartIndex,
+            maskStartIndex + maskValues.size,
         ) //with captured
 
         val remapper = LocalVarRemapper(parameters, initialFrameSize)
@@ -201,16 +205,7 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
 
     protected abstract fun generateAssertField()
 
-    private fun isInlinedToInlineFunInKotlinRuntime(): Boolean {
-        val codegen = this.codegen as? ExpressionCodegen ?: return false
-        val caller = codegen.context.functionDescriptor
-        if (!caller.isInline) return false
-        val callerPackage = DescriptorUtils.getParentOfType(caller, PackageFragmentDescriptor::class.java) ?: return false
-        return callerPackage.fqName.asString().let {
-            // package either equals to 'kotlin' or starts with 'kotlin.'
-            it.startsWith("kotlin") && (it.length <= 6 || it[6] == '.')
-        }
-    }
+    protected abstract fun isInlinedToInlineFunInKotlinRuntime(): Boolean
 
     protected fun rememberClosure(parameterType: Type, index: Int, lambdaInfo: LambdaInfo) {
         invocationParamBuilder.addNextValueParameter(parameterType, true, null, index).functionalArgument = lambdaInfo

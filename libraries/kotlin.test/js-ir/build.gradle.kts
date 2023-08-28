@@ -18,7 +18,7 @@ val commonTestSources by task<Sync> {
 }
 
 val jsMainSources by task<Sync> {
-    from("$rootDir/libraries/kotlin.test/js/src")
+    from("$rootDir/libraries/kotlin.test/js/src/main")
     into("$buildDir/jsMainSources")
 }
 
@@ -28,20 +28,17 @@ kotlin {
     }
 
     sourceSets {
-        val commonMain by getting {
+        named("commonMain") {
             dependencies {
-                api(project(":kotlin-stdlib-js-ir"))
+                api(kotlinStdlib("mpp"))
             }
-            kotlin.srcDir(commonMainSources.get().destinationDir)
+            kotlin.srcDir(commonMainSources)
         }
-        val commonTest by getting {
-            kotlin.srcDir(commonTestSources.get().destinationDir)
+        named("commonTest") {
+            kotlin.srcDir(commonTestSources)
         }
-        val jsMain by getting {
-            dependencies {
-                api(project(":kotlin-stdlib-js-ir"))
-            }
-            kotlin.srcDir(jsMainSources.get().destinationDir)
+        named("jsMain") {
+            kotlin.srcDir(jsMainSources)
         }
     }
 }
@@ -56,11 +53,5 @@ tasks.withType<KotlinCompile<*>>().configureEach {
 
 tasks.named("compileKotlinJs") {
     (this as KotlinCompile<*>).kotlinOptions.freeCompilerArgs += "-Xir-module-name=kotlin-test"
-    dependsOn(commonMainSources)
-    dependsOn(jsMainSources)
-}
-
-tasks.named("compileTestKotlinJs") {
-    dependsOn(commonTestSources)
 }
 

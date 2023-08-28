@@ -31,9 +31,11 @@ import org.jetbrains.kotlin.utils.newHashMapWithExpectedSize
 
 object ES6_INIT_CALL : IrStatementOriginImpl("ES6_INIT_CALL")
 object ES6_CONSTRUCTOR_REPLACEMENT : IrDeclarationOriginImpl("ES6_CONSTRUCTOR_REPLACEMENT")
+object ES6_SYNTHETIC_EXPORT_CONSTRUCTOR: IrDeclarationOriginImpl("ES6_SYNTHETIC_EXPORT_CONSTRUCTOR")
 object ES6_PRIMARY_CONSTRUCTOR_REPLACEMENT : IrDeclarationOriginImpl("ES6_PRIMARY_CONSTRUCTOR_REPLACEMENT")
 object ES6_INIT_FUNCTION : IrDeclarationOriginImpl("ES6_INIT_FUNCTION")
 object ES6_DELEGATING_CONSTRUCTOR_REPLACEMENT : IrStatementOriginImpl("ES6_DELEGATING_CONSTRUCTOR_REPLACEMENT")
+object ES6_DELEGATING_CONSTRUCTOR_CALL_REPLACEMENT : IrDeclarationOriginImpl("ES6_DELEGATING_CONSTRUCTOR_CALL_REPLACEMENT")
 
 val IrDeclaration.isEs6ConstructorReplacement: Boolean
     get() = origin == ES6_CONSTRUCTOR_REPLACEMENT || origin == ES6_PRIMARY_CONSTRUCTOR_REPLACEMENT
@@ -49,6 +51,12 @@ val IrDeclaration.isInitFunction: Boolean
 
 val IrFunctionAccessExpression.isInitCall: Boolean
     get() = origin == ES6_INIT_CALL
+
+val IrDeclaration.isSyntheticConstructorForExport: Boolean
+    get() = origin == ES6_SYNTHETIC_EXPORT_CONSTRUCTOR
+
+val IrDeclaration.isEs6DelegatingConstructorCallReplacement: Boolean
+    get() = origin == ES6_DELEGATING_CONSTRUCTOR_CALL_REPLACEMENT
 
 class ES6ConstructorLowering(val context: JsIrBackendContext) : DeclarationTransformer {
     private var IrConstructor.constructorFactory by context.mapping.secondaryConstructorToFactory
@@ -77,6 +85,7 @@ class ES6ConstructorLowering(val context: JsIrBackendContext) : DeclarationTrans
                         statements.add(JsIrBuilder.buildReturn(symbol, selfReplacedConstructorCall, returnType))
                     }
                 }
+                origin = ES6_SYNTHETIC_EXPORT_CONSTRUCTOR
             }
         }
     }
@@ -155,7 +164,8 @@ class ES6ConstructorLowering(val context: JsIrBackendContext) : DeclarationTrans
             type = irClass.defaultType,
             parent = this,
             name = Namer.SYNTHETIC_RECEIVER_NAME,
-            initializer = initializer
+            initializer = initializer,
+            origin = ES6_DELEGATING_CONSTRUCTOR_CALL_REPLACEMENT
         )
     }
 
@@ -225,7 +235,7 @@ class ES6ConstructorLowering(val context: JsIrBackendContext) : DeclarationTrans
                     constructor.isEffectivelyExternal() ->
                         JsIrBuilder.buildCall(context.intrinsics.jsCreateExternalThisSymbol)
                             .apply {
-                                putValueArgument(0, irClass.getCurrentConstructorReference(constructorReplacement))
+                                putValueArgument(0, getCurrentConstructorReference(constructorReplacement))
                                 putValueArgument(1, expression.symbol.owner.parentAsClass.jsConstructorReference(context))
                                 putValueArgument(2, irAnyArray(expression.valueArguments.memoryOptimizedMap { it ?: context.getVoid() }))
                                 putValueArgument(3, boxParameterGetter)
@@ -233,7 +243,7 @@ class ES6ConstructorLowering(val context: JsIrBackendContext) : DeclarationTrans
                     constructor.parentAsClass.symbol == context.irBuiltIns.anyClass ->
                         JsIrBuilder.buildCall(context.intrinsics.jsCreateThisSymbol)
                             .apply {
-                                putValueArgument(0, irClass.getCurrentConstructorReference(constructorReplacement))
+                                putValueArgument(0, getCurrentConstructorReference(constructorReplacement))
                                 putValueArgument(1, boxParameterGetter)
                             }
                     else ->
@@ -262,12 +272,8 @@ class ES6ConstructorLowering(val context: JsIrBackendContext) : DeclarationTrans
         }
     }
 
-    private fun IrClass.getCurrentConstructorReference(currentFactoryFunction: IrSimpleFunction): IrExpression {
-        return if (isFinalClass) {
-            jsConstructorReference(context)
-        } else {
-            JsIrBuilder.buildGetValue(currentFactoryFunction.dispatchReceiverParameter!!.symbol)
-        }
+    private fun getCurrentConstructorReference(currentFactoryFunction: IrSimpleFunction): IrExpression {
+        return JsIrBuilder.buildGetValue(currentFactoryFunction.dispatchReceiverParameter!!.symbol)
     }
 
     private fun IrDeclaration.excludeFromExport() {

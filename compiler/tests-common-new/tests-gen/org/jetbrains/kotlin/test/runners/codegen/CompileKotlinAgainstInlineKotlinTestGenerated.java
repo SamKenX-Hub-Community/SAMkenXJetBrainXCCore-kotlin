@@ -1041,6 +1041,12 @@ public class CompileKotlinAgainstInlineKotlinTestGenerated extends AbstractCompi
         public void testApiVersionAtLeast1() throws Exception {
             runTest("compiler/testData/codegen/boxInline/bytecodePreprocessing/apiVersionAtLeast1.kt");
         }
+
+        @Test
+        @TestMetadata("inlineApiVersionAtLeastInStdlibInlineFunction.kt")
+        public void testInlineApiVersionAtLeastInStdlibInlineFunction() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/bytecodePreprocessing/inlineApiVersionAtLeastInStdlibInlineFunction.kt");
+        }
     }
 
     @Nested
@@ -1486,6 +1492,18 @@ public class CompileKotlinAgainstInlineKotlinTestGenerated extends AbstractCompi
         @TestMetadata("lambdaInLambda.kt")
         public void testLambdaInLambda() throws Exception {
             runTest("compiler/testData/codegen/boxInline/complex/lambdaInLambda.kt");
+        }
+
+        @Test
+        @TestMetadata("nestedCallsWithGeneric.kt")
+        public void testNestedCallsWithGeneric() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/complex/nestedCallsWithGeneric.kt");
+        }
+
+        @Test
+        @TestMetadata("nestedCallsWithGenericToInt.kt")
+        public void testNestedCallsWithGenericToInt() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/complex/nestedCallsWithGenericToInt.kt");
         }
 
         @Test
@@ -2368,6 +2386,18 @@ public class CompileKotlinAgainstInlineKotlinTestGenerated extends AbstractCompi
         @Test
         public void testAllFilesPresentInEnum() throws Exception {
             KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/codegen/boxInline/enum"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM, true);
+        }
+
+        @Test
+        @TestMetadata("enumEntries.kt")
+        public void testEnumEntries() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/enum/enumEntries.kt");
+        }
+
+        @Test
+        @TestMetadata("enumEntriesChainCapturedType.kt")
+        public void testEnumEntriesChainCapturedType() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/enum/enumEntriesChainCapturedType.kt");
         }
 
         @Test
@@ -4265,6 +4295,18 @@ public class CompileKotlinAgainstInlineKotlinTestGenerated extends AbstractCompi
         }
 
         @Test
+        @TestMetadata("byteIteratorWithForLoop.kt")
+        public void testByteIteratorWithForLoop() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/signature/byteIteratorWithForLoop.kt");
+        }
+
+        @Test
+        @TestMetadata("byteIteratorWithWhileLoop.kt")
+        public void testByteIteratorWithWhileLoop() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/signature/byteIteratorWithWhileLoop.kt");
+        }
+
+        @Test
         @TestMetadata("inProjectionSubstitution.kt")
         public void testInProjectionSubstitution() throws Exception {
             runTest("compiler/testData/codegen/boxInline/signature/inProjectionSubstitution.kt");
@@ -5762,6 +5804,52 @@ public class CompileKotlinAgainstInlineKotlinTestGenerated extends AbstractCompi
         @TestMetadata("tryCatchFinally.kt")
         public void testTryCatchFinally() throws Exception {
             runTest("compiler/testData/codegen/boxInline/tryCatchFinally/tryCatchFinally.kt");
+        }
+    }
+
+    @Nested
+    @TestMetadata("compiler/testData/codegen/boxInline/typeParameters")
+    @TestDataPath("$PROJECT_ROOT")
+    public class TypeParameters {
+        @Test
+        public void testAllFilesPresentInTypeParameters() throws Exception {
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/codegen/boxInline/typeParameters"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM, true);
+        }
+
+        @Test
+        @TestMetadata("anonymousObject.kt")
+        public void testAnonymousObject() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/typeParameters/anonymousObject.kt");
+        }
+
+        @Test
+        @TestMetadata("basic.kt")
+        public void testBasic() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/typeParameters/basic.kt");
+        }
+
+        @Test
+        @TestMetadata("projectionTypeArguments.kt")
+        public void testProjectionTypeArguments() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/typeParameters/projectionTypeArguments.kt");
+        }
+
+        @Test
+        @TestMetadata("severalUpperBounds.kt")
+        public void testSeveralUpperBounds() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/typeParameters/severalUpperBounds.kt");
+        }
+
+        @Test
+        @TestMetadata("typeArgFromGenericBaseClass.kt")
+        public void testTypeArgFromGenericBaseClass() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/typeParameters/typeArgFromGenericBaseClass.kt");
+        }
+
+        @Test
+        @TestMetadata("uncheckedCastToNothing.kt")
+        public void testUncheckedCastToNothing() throws Exception {
+            runTest("compiler/testData/codegen/boxInline/typeParameters/uncheckedCastToNothing.kt");
         }
     }
 

@@ -5,13 +5,19 @@
 
 package org.jetbrains.kotlin.analysis.low.level.api.fir.util
 
-import org.jetbrains.kotlin.analysis.low.level.api.fir.api.throwUnexpectedFirElementError
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
+import org.jetbrains.kotlin.analysis.api.KtAnalysisApiInternals
+import org.jetbrains.kotlin.analysis.low.level.api.fir.LLFirInternals
+import org.jetbrains.kotlin.analysis.low.level.api.fir.api.LLFirResolveSession
+import org.jetbrains.kotlin.analysis.low.level.api.fir.element.builder.canBePartOfParentDeclaration
 import org.jetbrains.kotlin.analysis.low.level.api.fir.element.builder.containingDeclaration
 import org.jetbrains.kotlin.analysis.low.level.api.fir.element.builder.getNonLocalContainingOrThisDeclaration
 import org.jetbrains.kotlin.analysis.low.level.api.fir.file.builder.LLFirFileBuilder
 import org.jetbrains.kotlin.analysis.low.level.api.fir.providers.LLFirProvider
 import org.jetbrains.kotlin.analysis.low.level.api.fir.sessions.llFirSession
 import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.expressions.FirStatement
 import org.jetbrains.kotlin.fir.psi
 import org.jetbrains.kotlin.fir.realPsi
 import org.jetbrains.kotlin.fir.resolve.providers.FirProvider
@@ -21,42 +27,74 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
 import org.jetbrains.kotlin.psi.psiUtil.parameterIndex
 
-/**
- * 'Non-local' stands for not local classes/functions/etc.
- */
 internal fun KtDeclaration.findSourceNonLocalFirDeclaration(
     firFileBuilder: LLFirFileBuilder,
     provider: FirProvider,
-    containerFirFile: FirFile? = null,
-): FirDeclaration {
-    //TODO test what way faster
-    findSourceNonLocalFirDeclarationByProvider(firFileBuilder, provider, containerFirFile)?.let { return it }
-    findSourceByTraversingWholeTree(firFileBuilder, containerFirFile)?.let { return it }
-    errorWithFirSpecificEntries("No fir element was found for", psi = this)
-}
+): FirDeclaration = findSourceNonLocalFirDeclaration(
+    firFileBuilder.buildRawFirFileWithCaching(containingKtFile),
+    provider,
+)
 
-internal fun KtDeclaration.findFirDeclarationForAnyFirSourceDeclaration(
-    firFileBuilder: LLFirFileBuilder,
-    provider: FirProvider,
-): FirDeclaration {
-    val nonLocalDeclaration = getNonLocalContainingOrThisDeclaration()
-        ?.findSourceNonLocalFirDeclaration(firFileBuilder, provider)
-        ?: firFileBuilder.buildRawFirFileWithCaching(containingKtFile)
-    val originalDeclaration = originalDeclaration
-    val fir = FirElementFinder.findElementIn<FirDeclaration>(nonLocalDeclaration) { firDeclaration ->
-        firDeclaration.psi == this || firDeclaration.psi == originalDeclaration
+/**
+ * 'Non-local' stands for not local classes/functions/etc.
+ */
+internal fun KtDeclaration.findSourceNonLocalFirDeclaration(firFile: FirFile, provider: FirProvider): FirDeclaration {
+    // TODO test what way faster
+    if (isPhysical) {
+        // do not request providers with non-physical psi in order not to leak them there and
+        // to avoid inconsistency between physical psi and its copy during completion
+        findSourceNonLocalFirDeclarationByProvider(
+            firDeclarationProvider = { declaration ->
+                if (declaration is KtClassLikeDeclaration) {
+                    declaration.findFir(provider)
+                } else {
+                    val containingClassOrObject = declaration.containingClassOrObject
+                    val declarations = if (containingClassOrObject != null) {
+                        val containerClassFir = containingClassOrObject.findFir(provider) as? FirRegularClass
+                        containerClassFir?.declarations
+                    } else {
+                        if (declaration.containingKtFile.isScript()) {
+                            // .kts will have a single [FirScript] as a declaration. We need to unwrap statements in it.
+                            val firScript = firFile.declarations.singleOrNull() as? FirScript
+                            if (declaration is KtScript) {
+                                return@findSourceNonLocalFirDeclarationByProvider firScript?.takeIf { it.psi == declaration }
+                            }
+
+                            firScript?.statements?.filterIsInstance<FirDeclaration>()
+                        } else {
+                            firFile.declarations
+                        }
+                    }
+
+                    // It is possible that we will not be able to find the needed declaration here when the code is invalid
+                    // e.g., we have two conflicting declarations with the same name,
+                    // and we are searching for the wrong one
+                    declarations?.find { it.psi == declaration }
+                }
+            },
+        )?.let { return it }
     }
-    return fir
-        ?: errorWithFirSpecificEntries("FirDeclaration was not found", psi = this)
+
+    findSourceNonLocalFirDeclarationByProvider(
+        firDeclarationProvider = { declaration ->
+            FirElementFinder.findDeclaration(firFile, declaration)
+        },
+    )?.let { return it }
+
+    errorWithFirSpecificEntries(
+        "No fir element was found for ${this::class.simpleName}",
+        psi = this,
+        fir = firFile,
+        additionalInfos = { withEntry("isPhysical", isPhysical.toString()) }
+    )
 }
 
-internal inline fun <reified F : FirDeclaration> KtDeclaration.findFirDeclarationForAnyFirSourceDeclarationOfType(
-    firFileBuilder: LLFirFileBuilder,
-    provider: FirProvider,
-): FirDeclaration {
-    val fir = findFirDeclarationForAnyFirSourceDeclaration(firFileBuilder, provider)
-    if (fir !is F) throwUnexpectedFirElementError(fir, this, F::class)
-    return fir
+@KtAnalysisApiInternals
+fun PsiElement.collectContainingDeclarationsIfNonLocal(session: LLFirResolveSession): List<FirDeclaration>? {
+    val ktFile = containingFile as? KtFile ?: return null
+    val ktDeclaration = getNonLocalContainingOrThisDeclaration { !it.canBePartOfParentDeclaration } ?: return null
+    val firFile = session.getOrBuildFirFile(ktFile)
+    return FirElementFinder.findPathToDeclarationWithTarget(firFile, ktDeclaration)
 }
 
 internal fun KtElement.findSourceByTraversingWholeTree(
@@ -68,7 +106,7 @@ internal fun KtElement.findSourceByTraversingWholeTree(
     val isDeclaration = this is KtDeclaration
     return FirElementFinder.findElementIn(
         firFile,
-        canGoInside = { it is FirRegularClass || it is FirScript },
+        canGoInside = { it is FirRegularClass || it is FirScript || it is FirFunction || it is FirProperty },
         predicate = { firDeclaration ->
             firDeclaration.psi == this || isDeclaration && firDeclaration.psi == originalDeclaration
         }
@@ -76,53 +114,23 @@ internal fun KtElement.findSourceByTraversingWholeTree(
 }
 
 private fun KtDeclaration.findSourceNonLocalFirDeclarationByProvider(
-    firFileBuilder: LLFirFileBuilder,
-    provider: FirProvider,
-    containerFirFile: FirFile?,
+    firDeclarationProvider: (KtDeclaration) -> FirDeclaration?,
 ): FirDeclaration? {
-    val candidate = when {
-        this is KtClassOrObject -> findFir(provider)
-        this is KtNamedDeclaration && (this is KtProperty || this is KtNamedFunction) -> {
-            val containerClass = containingClassOrObject
-            val declarations = if (containerClass != null) {
-                val containerClassFir = containerClass.findFir(provider) as? FirRegularClass
-                containerClassFir?.declarations
-            } else {
-                val ktFile = containingKtFile
-                val firFile = containerFirFile ?: firFileBuilder.buildRawFirFileWithCaching(ktFile)
-                if (ktFile.isScript()) {
-                    // .kts will have a single [FirScript] as a declaration. We need to unwrap statements in it.
-                    (firFile.declarations.singleOrNull() as? FirScript)?.statements?.filterIsInstance<FirDeclaration>()
-                } else {
-                    firFile.declarations
-                }
-            }
-            val original = originalDeclaration
+    val candidate = when (this) {
+        is KtClassOrObject,
+        is KtProperty,
+        is KtNamedFunction,
+        is KtConstructor<*>,
+        is KtClassInitializer,
+        is KtTypeAlias,
+        is KtDestructuringDeclaration,
+        is KtScript,
+        -> firDeclarationProvider(this)
 
-            /*
-            It is possible that we will not be able to find needed declaration here when the code is invalid,
-            e.g, we have two conflicting declarations with the same name and we are searching in the wrong one
-             */
-            declarations?.firstOrNull { it.psi == this || it.psi == original }
-        }
-        this is KtConstructor<*> || this is KtClassInitializer -> {
-            val containingClass = containingClassOrObject
-                ?: errorWithFirSpecificEntries("Container class should be not null for KtConstructor", psi = this)
-            val containerClassFir = containingClass.findFir(provider) as? FirRegularClass ?: return null
-            containerClassFir.declarations.firstOrNull { it.psi === this }
-        }
-        this is KtTypeAlias -> findFir(provider)
-        this is KtDestructuringDeclaration -> {
-            val firFile = containerFirFile ?: firFileBuilder.buildRawFirFileWithCaching(containingKtFile)
-            firFile.declarations.firstOrNull { it.psi == this }
-        }
-        this is KtScript -> containerFirFile?.declarations?.singleOrNull { it is FirScript }
-        this is KtPropertyAccessor -> {
-            val firPropertyDeclaration = property.nonLocalFirDeclaration<FirVariable>(
-                firFileBuilder,
-                provider,
-                containerFirFile,
-            )
+        is KtPropertyAccessor -> {
+            val firPropertyDeclaration = property.findSourceNonLocalFirDeclarationByProvider(
+                firDeclarationProvider,
+            ) as? FirVariable ?: return null
 
             if (isGetter) {
                 firPropertyDeclaration.getter
@@ -130,56 +138,38 @@ private fun KtDeclaration.findSourceNonLocalFirDeclarationByProvider(
                 firPropertyDeclaration.setter
             }
         }
-        this is KtParameter -> {
-            val ownerFunction = ownerFunction
-                ?: errorWithFirSpecificEntries("Containing function should be not null for KtParameter", psi = this)
 
-            val firFunctionDeclaration = ownerFunction.nonLocalFirDeclaration<FirFunction>(
-                firFileBuilder,
-                provider,
-                containerFirFile,
+        is KtParameter -> {
+            val ownerFunction = ownerFunction ?: errorWithFirSpecificEntries(
+                "Containing function should be not null for KtParameter",
+                psi = this,
             )
+
+            val firFunctionDeclaration = ownerFunction.findSourceNonLocalFirDeclarationByProvider(
+                firDeclarationProvider,
+            ) as? FirFunction ?: return null
 
             firFunctionDeclaration.valueParameters[parameterIndex()]
         }
-        this is KtTypeParameter -> {
-            val declaration = containingDeclaration
-                ?: errorWithFirSpecificEntries("Containing declaration should be not null for KtTypeParameter", psi = this)
 
-            val firTypeParameterOwner = declaration.nonLocalFirDeclaration<FirTypeParameterRefsOwner>(
-                firFileBuilder,
-                provider,
-                containerFirFile,
+        is KtTypeParameter -> {
+            val declaration = containingDeclaration ?: errorWithFirSpecificEntries(
+                "Containing declaration should be not null for KtTypeParameter",
+                psi = this,
             )
 
-            val index = (parent as KtTypeParameterList).parameters.indexOf(this)
-            firTypeParameterOwner.typeParameters[index] as FirDeclaration
+            val firTypeParameterOwner = declaration.findSourceNonLocalFirDeclarationByProvider(
+                firDeclarationProvider,
+            ) as? FirTypeParameterRefsOwner ?: return null
+
+            firTypeParameterOwner.typeParameters.firstOrNull { it.psi == this } as FirDeclaration
         }
+
         else -> errorWithFirSpecificEntries("Invalid container", psi = this)
     }
-    return candidate?.takeIf { it.realPsi == this }
-}
 
-private inline fun <reified T> KtDeclaration.nonLocalFirDeclaration(
-    firFileBuilder: LLFirFileBuilder,
-    provider: FirProvider,
-    containerFirFile: FirFile?,
-): T {
-    val firResult = findSourceNonLocalFirDeclarationByProvider(
-        firFileBuilder,
-        provider,
-        containerFirFile,
-    )
-
-    if (firResult !is T) {
-        errorWithFirSpecificEntries(
-            "${T::class.simpleName} for ${this::class.simpleName} declaration is not found",
-            psi = this,
-            fir = firResult,
-        )
-    }
-
-    return firResult
+    //property accessors for properties with delegation have KtFakeSourceElementKind.DelegatedPropertyAccessor kind
+    return candidate?.takeIf { it.psi == this }
 }
 
 fun FirAnonymousInitializer.containingClass(): FirRegularClass {
@@ -208,6 +198,57 @@ private fun KtClassLikeDeclaration.findFir(provider: FirProvider): FirClassLikeD
     }
 }
 
+@LLFirInternals
+val FirFile.codeFragment: FirCodeFragment
+    get() {
+        return declarations.singleOrNull() as? FirCodeFragment
+            ?: errorWithFirSpecificEntries("Code fragment not found in a FirFile", fir = this)
+    }
 
 val FirDeclaration.isGeneratedDeclaration
     get() = realPsi == null
+
+internal inline fun FirScript.forEachDeclaration(action: (FirDeclaration) -> Unit) {
+    for (statement in statements) {
+        if (statement.isScriptStatement) continue
+        action(statement as FirDeclaration)
+    }
+}
+
+internal inline fun FirRegularClass.forEachDeclaration(action: (FirDeclaration) -> Unit) {
+    declarations.forEach(action)
+}
+
+internal val FirDeclaration.isDeclarationContainer: Boolean get() = this is FirRegularClass || this is FirScript
+
+internal inline fun FirDeclaration.forEachDeclaration(action: (FirDeclaration) -> Unit) {
+    when (this) {
+        is FirRegularClass -> forEachDeclaration(action)
+        is FirScript -> forEachDeclaration(action)
+        else -> errorWithFirSpecificEntries("Unsupported declarations container", fir = this)
+    }
+}
+
+internal val FirStatement.isScriptStatement: Boolean get() = this !is FirDeclaration || isScriptDependentDeclaration
+
+internal val FirStatement.isScriptDependentDeclaration: Boolean
+    get() = this is FirDeclaration && origin == FirDeclarationOrigin.ScriptCustomization.ResultProperty
+
+internal inline fun FirScript.forEachDependentDeclaration(action: (FirDeclaration) -> Unit) {
+    for (statement in statements) {
+        if (statement !is FirDeclaration || !statement.isScriptDependentDeclaration) continue
+        action(statement)
+    }
+}
+
+val PsiElement.parentsWithSelfCodeFragmentAware: Sequence<PsiElement>
+    get() = generateSequence(this) { element ->
+        when (element) {
+            is KtCodeFragment -> element.context
+            is PsiFile -> null
+            else -> element.parent
+        }
+    }
+
+val PsiElement.parentsCodeFragmentAware: Sequence<PsiElement>
+    get() = parentsWithSelfCodeFragmentAware.drop(1)

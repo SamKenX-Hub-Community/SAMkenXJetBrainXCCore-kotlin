@@ -20,10 +20,12 @@ import org.jetbrains.kotlin.fir.expressions.FirAnnotation
 import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.expressions.builder.buildExpressionStub
 import org.jetbrains.kotlin.fir.resolve.defaultType
+import org.jetbrains.kotlin.fir.resolve.transformers.setLazyPublishedVisibility
 import org.jetbrains.kotlin.fir.symbols.FirBasedSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.toEffectiveVisibility
 import org.jetbrains.kotlin.fir.types.ConeLookupTagBasedType
+import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.types.builder.buildResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.coneType
@@ -203,6 +205,7 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
         val classId = ClassId(c.packageFqName, name)
         val symbol = preComputedSymbol ?: FirTypeAliasSymbol(classId)
         val local = c.childContext(proto.typeParameterList, containingDeclarationSymbol = symbol)
+        val versionRequirements = VersionRequirement.create(proto, c)
         return buildTypeAlias {
             moduleData = c.moduleData
             origin = FirDeclarationOrigin.Library
@@ -222,8 +225,9 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
             expandedTypeRef = proto.underlyingType(c.typeTable).toTypeRef(local)
             resolvePhase = FirResolvePhase.ANALYZED_DEPENDENCIES
             typeParameters += local.typeDeserializer.ownTypeParameters.map { it.fir }
+            deprecationsProvider = annotations.getDeprecationsProviderFromAnnotations(c.session, fromJava = false, versionRequirements)
         }.apply {
-            versionRequirementsTable = c.versionRequirementTable
+            this.versionRequirements = versionRequirements
             sourceElement = c.containerSource
         }
     }
@@ -256,7 +260,7 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
                 dispatchReceiverType = c.dispatchReceiver
                 this.propertySymbol = propertySymbol
             }.apply {
-                versionRequirementsTable = c.versionRequirementTable
+                this.versionRequirements = VersionRequirement.create(proto, c)
             }
         } else {
             FirDefaultPropertyGetter(
@@ -316,7 +320,7 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
                 )
                 this.propertySymbol = propertySymbol
             }.apply {
-                versionRequirementsTable = c.versionRequirementTable
+                this.versionRequirements = VersionRequirement.create(proto, c)
             }
         } else {
             FirDefaultPropertySetter(
@@ -374,6 +378,7 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
         val propertyModality = ProtoEnumFlags.modality(Flags.MODALITY.get(flags))
 
         val isVar = Flags.IS_VAR.get(flags)
+        val versionRequirements = VersionRequirement.create(proto, c)
         return buildProperty {
             moduleData = c.moduleData
             origin = FirDeclarationOrigin.Library
@@ -462,11 +467,15 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
                 }
                 else -> null
             }
-            deprecationsProvider = annotations.getDeprecationsProviderFromAnnotations(c.session, fromJava = false)
 
             proto.contextReceiverTypes(c.typeTable).mapTo(contextReceivers, ::loadContextReceiver)
         }.apply {
-            versionRequirementsTable = c.versionRequirementTable
+            initializer?.replaceConeTypeOrNull(returnTypeRef.type)
+            this.versionRequirements = versionRequirements
+            replaceDeprecationsProvider(getDeprecationsProvider(c.session))
+            setLazyPublishedVisibility(c.session)
+            getter?.setLazyPublishedVisibility(annotations, this, c.session)
+            setter?.setLazyPublishedVisibility(annotations, this, c.session)
         }
     }
 
@@ -504,6 +513,7 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
         val symbol = FirNamedFunctionSymbol(callableId)
         val local = c.childContext(proto.typeParameterList, containingDeclarationSymbol = symbol)
 
+        val versionRequirements = VersionRequirement.create(proto, c)
         val simpleFunction = buildSimpleFunction {
             moduleData = c.moduleData
             origin = deserializationOrigin
@@ -546,12 +556,13 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
             )
             annotations +=
                 c.annotationDeserializer.loadFunctionAnnotations(c.containerSource, proto, local.nameResolver, local.typeTable)
-            deprecationsProvider = annotations.getDeprecationsProviderFromAnnotations(c.session, fromJava = false)
+            deprecationsProvider = annotations.getDeprecationsProviderFromAnnotations(c.session, fromJava = false, versionRequirements)
             this.containerSource = c.containerSource
 
             proto.contextReceiverTypes(c.typeTable).mapTo(contextReceivers, ::loadContextReceiver)
         }.apply {
-            versionRequirementsTable = c.versionRequirementTable
+            this.versionRequirements = versionRequirements
+            setLazyPublishedVisibility(c.session)
         }
         if (proto.hasContract()) {
             val contractDeserializer = if (proto.typeParameterList.isEmpty()) this.contractDeserializer else FirContractDeserializer(local)
@@ -634,7 +645,8 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
             contextReceivers.addAll(createContextReceiversForClass(classProto))
         }.build().apply {
             containingClassForStaticMemberAttr = c.dispatchReceiver!!.lookupTag
-            versionRequirementsTable = c.versionRequirementTable
+            this.versionRequirements = VersionRequirement.create(proto, c)
+            setLazyPublishedVisibility(c.session)
         }
     }
 
@@ -681,12 +693,10 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
                     callableKind,
                     index,
                 )
-            }.apply {
-                versionRequirementsTable = c.versionRequirementTable
             }
         }.toList()
     }
 
-    private fun ProtoBuf.Type.toTypeRef(context: FirDeserializationContext): FirTypeRef =
+    private fun ProtoBuf.Type.toTypeRef(context: FirDeserializationContext): FirResolvedTypeRef =
         context.typeDeserializer.typeRef(this)
 }

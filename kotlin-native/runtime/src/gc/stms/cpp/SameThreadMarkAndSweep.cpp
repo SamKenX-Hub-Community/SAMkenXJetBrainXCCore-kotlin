@@ -9,10 +9,12 @@
 
 #include "CompilerConstants.hpp"
 #include "GlobalData.hpp"
+#include "GCImpl.hpp"
 #include "GCStatistics.hpp"
 #include "Logging.hpp"
 #include "MarkAndSweepUtils.hpp"
 #include "Memory.h"
+#include "ObjectAlloc.hpp"
 #include "RootSet.hpp"
 #include "Runtime.h"
 #include "ThreadData.hpp"
@@ -21,150 +23,111 @@
 
 using namespace kotlin;
 
-namespace {
-
-struct SweepTraits {
-    using ObjectFactory = mm::ObjectFactory<gc::SameThreadMarkAndSweep>;
-    using ExtraObjectsFactory = mm::ExtraObjectDataFactory;
-
-    static bool IsMarkedByExtraObject(mm::ExtraObjectData &object) noexcept {
-        auto *baseObject = object.GetBaseObject();
-        if (!baseObject->heap()) return true;
-        auto& objectData = mm::ObjectFactory<gc::SameThreadMarkAndSweep>::NodeRef::From(baseObject).ObjectData();
-        return objectData.marked();
-    }
-
-    static bool TryResetMark(ObjectFactory::NodeRef node) noexcept {
-        auto& objectData = node.ObjectData();
-        return objectData.tryResetMark();
-    }
-};
-
-struct FinalizeTraits {
-    using ObjectFactory = mm::ObjectFactory<gc::SameThreadMarkAndSweep>;
-};
-
-struct ProcessWeaksTraits {
-    static bool IsMarked(ObjHeader* obj) noexcept {
-        auto& objectData = mm::ObjectFactory<gc::SameThreadMarkAndSweep>::NodeRef::From(obj).ObjectData();
-        return objectData.marked();
-    }
-};
-
-// Global, because it's accessed on a hot path: avoid memory load from `this`.
-std::atomic<gc::SameThreadMarkAndSweep::SafepointFlag> gSafepointFlag = gc::SameThreadMarkAndSweep::SafepointFlag::kNone;
-
-} // namespace
-
-void gc::SameThreadMarkAndSweep::ThreadData::SafePointAllocation(size_t size) noexcept {
-    gcScheduler_.OnSafePointAllocation(size);
-    SafepointFlag flag = gSafepointFlag.load();
-    if (flag != SafepointFlag::kNone) {
-        SafePointSlowPath(flag);
-    }
-}
-
-void gc::SameThreadMarkAndSweep::ThreadData::ScheduleAndWaitFullGC() noexcept {
-    RuntimeLogInfo({kTagGC}, "Scheduling GC manually");
-    auto didGC = gc_.PerformFullGC();
-
-    if (!didGC) {
-        // If we failed to suspend threads, someone else might be asking to suspend them.
-        mm::SuspendIfRequested();
-    }
-}
-
-void gc::SameThreadMarkAndSweep::ThreadData::OnOOM(size_t size) noexcept {
-    RuntimeLogDebug({kTagGC}, "Attempt to GC on OOM at size=%zu", size);
-    ScheduleAndWaitFullGC();
-}
-
-NO_INLINE void gc::SameThreadMarkAndSweep::ThreadData::SafePointSlowPath(SafepointFlag flag) noexcept {
-    switch (flag) {
-        case SafepointFlag::kNone:
-            RuntimeAssert(false, "Must've been handled by the caller");
-            return;
-        case SafepointFlag::kNeedsSuspend:
-            mm::SuspendIfRequested();
-            return;
-        case SafepointFlag::kNeedsGC:
-            RuntimeLogDebug({kTagGC}, "Attempt to GC at SafePoint");
-            ScheduleAndWaitFullGC();
-            return;
-    }
-}
-
+#ifdef CUSTOM_ALLOCATOR
 gc::SameThreadMarkAndSweep::SameThreadMarkAndSweep(
-        mm::ObjectFactory<SameThreadMarkAndSweep>& objectFactory, GCScheduler& gcScheduler) noexcept :
-    objectFactory_(objectFactory), gcScheduler_(gcScheduler) {
-    gcScheduler_.SetScheduleGC([]() {
-        // TODO: CMS is also responsible for avoiding scheduling while GC hasn't started running.
-        //       Investigate, if it's possible to move this logic into the scheduler.
-        SafepointFlag expectedFlag = SafepointFlag::kNone;
-        if (gSafepointFlag.compare_exchange_strong(expectedFlag, SafepointFlag::kNeedsGC)) {
-            RuntimeLogDebug({kTagGC}, "Scheduling GC by thread %d", konan::currentThreadId());
+        gcScheduler::GCScheduler& gcScheduler) noexcept :
+#else
+gc::SameThreadMarkAndSweep::SameThreadMarkAndSweep(
+        ObjectFactory& objectFactory, mm::ExtraObjectDataFactory& extraObjectDataFactory, gcScheduler::GCScheduler& gcScheduler) noexcept :
+
+    objectFactory_(objectFactory),
+    extraObjectDataFactory_(extraObjectDataFactory),
+#endif
+    gcScheduler_(gcScheduler), finalizerProcessor_([this](int64_t epoch) noexcept {
+        GCHandle::getByEpoch(epoch).finalizersDone();
+        state_.finalized(epoch);
+    }) {
+    gcThread_ = ScopedThread(ScopedThread::attributes().name("GC thread"), [this] {
+        while (true) {
+            auto epoch = state_.waitScheduled();
+            if (epoch.has_value()) {
+                PerformFullGC(*epoch);
+            } else {
+                break;
+            }
         }
     });
     RuntimeLogDebug({kTagGC}, "Same thread Mark & Sweep GC initialized");
 }
 
-bool gc::SameThreadMarkAndSweep::PerformFullGC() noexcept {
-    RuntimeLogDebug({kTagGC}, "Attempt to suspend threads by thread %d", konan::currentThreadId());
-    bool didSuspend = mm::RequestThreadsSuspension();
-    if (!didSuspend) {
-        RuntimeLogDebug({kTagGC}, "Failed to suspend threads by thread %d", konan::currentThreadId());
-        // Somebody else suspended the threads, and so ran a GC.
-        // TODO: This breaks if suspension is used by something apart from GC.
-        return false;
-    }
-    gSafepointFlag = SafepointFlag::kNeedsSuspend;
-    auto gcHandle = GCHandle::create(epoch_++);
-    gcHandle.suspensionRequested();
-
-    mm::ObjectFactory<gc::SameThreadMarkAndSweep>::FinalizerQueue finalizerQueue;
-    {
-        // Switch state to native to simulate this thread being a GC thread.
-        ThreadStateGuard guard(ThreadState::kNative);
-
-        mm::WaitForThreadsSuspension();
-        gcHandle.threadsAreSuspended();
-
-        auto& scheduler = gcScheduler_;
-        scheduler.gcData().OnPerformFullGC();
-
-        gc::collectRootSet<internal::MarkTraits>(gcHandle, markQueue_, [] (mm::ThreadData&) { return true; });
-        auto& extraObjectsDataFactory = mm::GlobalData::Instance().extraObjectDataFactory();
-
-        gc::Mark<internal::MarkTraits>(gcHandle, markQueue_);
-        auto markStats = gcHandle.getMarked();
-        scheduler.gcData().UpdateAliveSetBytes(markStats.markedSizeBytes);
-
-        gc::processWeaks<ProcessWeaksTraits>(gcHandle, mm::SpecialRefRegistry::instance());
-
-        gc::SweepExtraObjects<SweepTraits>(gcHandle, extraObjectsDataFactory);
-        finalizerQueue = gc::Sweep<SweepTraits>(gcHandle, objectFactory_);
-
-        kotlin::compactObjectPoolInMainThread();
-
-        gSafepointFlag = SafepointFlag::kNone;
-        mm::ResumeThreads();
-        gcHandle.threadsAreResumed();
-        gcHandle.finalizersScheduled(finalizerQueue.size());
-        gcHandle.finished();
-    }
-
-    // Finalizers are run after threads are resumed, because finalizers may request GC themselves, which would
-    // try to suspend threads again. Also, we run finalizers in the runnable state, because they may be executing
-    // kotlin code.
-
-    // TODO: These will actually need to be run on a separate thread.
-    AssertThreadState(ThreadState::kRunnable);
-    finalizerQueue.Finalize();
-    gcHandle.finalizersDone();
-
-    return true;
+gc::SameThreadMarkAndSweep::~SameThreadMarkAndSweep() {
+    state_.shutdown();
 }
 
-gc::SameThreadMarkAndSweep::SafepointFlag gc::internal::loadSafepointFlag() noexcept {
-    return gSafepointFlag.load();
+void gc::SameThreadMarkAndSweep::StartFinalizerThreadIfNeeded() noexcept {
+    NativeOrUnregisteredThreadGuard guard(true);
+    finalizerProcessor_.StartFinalizerThreadIfNone();
+    finalizerProcessor_.WaitFinalizerThreadInitialized();
+}
+
+void gc::SameThreadMarkAndSweep::StopFinalizerThreadIfRunning() noexcept {
+    NativeOrUnregisteredThreadGuard guard(true);
+    finalizerProcessor_.StopFinalizerThread();
+}
+
+bool gc::SameThreadMarkAndSweep::FinalizersThreadIsRunning() noexcept {
+    return finalizerProcessor_.IsRunning();
+}
+
+void gc::SameThreadMarkAndSweep::PerformFullGC(int64_t epoch) noexcept {
+    auto gcHandle = GCHandle::create(epoch);
+    bool didSuspend = mm::RequestThreadsSuspension();
+    RuntimeAssert(didSuspend, "Only GC thread can request suspension");
+    gcHandle.suspensionRequested();
+
+    RuntimeAssert(!kotlin::mm::IsCurrentThreadRegistered(), "GC must run on unregistered thread");
+    mm::WaitForThreadsSuspension();
+    gcHandle.threadsAreSuspended();
+
+    auto& scheduler = gcScheduler_;
+    scheduler.onGCStart();
+
+    state_.start(epoch);
+
+#ifdef CUSTOM_ALLOCATOR
+    // This should really be done by each individual thread while waiting
+    for (auto& thread : kotlin::mm::ThreadRegistry::Instance().LockForIter()) {
+        thread.gc().impl().alloc().PrepareForGC();
+    }
+    heap_.PrepareForGC();
+#endif
+
+    gc::collectRootSet<internal::MarkTraits>(gcHandle, markQueue_, [](mm::ThreadData&) { return true; });
+
+    gc::Mark<internal::MarkTraits>(gcHandle, markQueue_);
+
+    gc::processWeaks<DefaultProcessWeaksTraits>(gcHandle, mm::SpecialRefRegistry::instance());
+
+#ifndef CUSTOM_ALLOCATOR
+    for (auto& thread : kotlin::mm::ThreadRegistry::Instance().LockForIter()) {
+        thread.gc().PublishObjectFactory();
+    }
+
+    // Taking the locks before the pause is completed. So that any destroying thread
+    // would not publish into the global state at an unexpected time.
+    std::optional extraObjectFactoryIterable = extraObjectDataFactory_.LockForIter();
+    std::optional objectFactoryIterable = objectFactory_.LockForIter();
+
+    gc::SweepExtraObjects<DefaultSweepTraits<ObjectFactory>>(gcHandle, *extraObjectFactoryIterable);
+    extraObjectFactoryIterable = std::nullopt;
+    auto finalizerQueue = gc::Sweep<DefaultSweepTraits<ObjectFactory>>(gcHandle, *objectFactoryIterable);
+    objectFactoryIterable = std::nullopt;
+    kotlin::compactObjectPoolInMainThread();
+#else
+    // also sweeps extraObjects
+    auto finalizerQueue = heap_.Sweep(gcHandle);
+    for (auto& thread : kotlin::mm::ThreadRegistry::Instance().LockForIter()) {
+        finalizerQueue.TransferAllFrom(thread.gc().impl().alloc().ExtractFinalizerQueue());
+    }
+    finalizerQueue.TransferAllFrom(heap_.ExtractFinalizerQueue());
+#endif
+
+    scheduler.onGCFinish(epoch, allocatedBytes());
+
+    mm::ResumeThreads();
+    gcHandle.threadsAreResumed();
+    state_.finish(epoch);
+    gcHandle.finalizersScheduled(finalizerQueue.size());
+    gcHandle.finished();
+    finalizerProcessor_.ScheduleTasks(std::move(finalizerQueue), epoch);
 }

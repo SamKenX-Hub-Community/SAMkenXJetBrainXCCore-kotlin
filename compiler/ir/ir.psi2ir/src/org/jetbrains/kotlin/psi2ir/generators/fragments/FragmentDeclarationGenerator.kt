@@ -11,14 +11,11 @@ import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrDelegatingConstructorCallImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrInstanceInitializerCallImpl
+import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.impl.IrConstructorPublicSymbolImpl
-import org.jetbrains.kotlin.ir.types.classOrNull
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtBlockCodeFragment
-import org.jetbrains.kotlin.psi.psiUtil.pureEndOffset
-import org.jetbrains.kotlin.psi.psiUtil.pureStartOffset
 import org.jetbrains.kotlin.psi2ir.generators.Generator
 import org.jetbrains.kotlin.psi2ir.generators.GeneratorContext
 import org.jetbrains.kotlin.psi2ir.generators.createBodyGenerator
@@ -35,7 +32,7 @@ open class FragmentDeclarationGenerator(
         val startOffset = UNDEFINED_OFFSET
         val endOffset = UNDEFINED_OFFSET
 
-        return context.symbolTable.declareClass(classDescriptor) {
+        return context.symbolTable.descriptorExtension.declareClass(classDescriptor) {
             context.irFactory.createIrClassFromDescriptor(
                 startOffset, endOffset,
                 IrDeclarationOrigin.DEFINED,
@@ -46,7 +43,7 @@ open class FragmentDeclarationGenerator(
                 Modality.FINAL
             )
         }.buildWithScope { irClass ->
-            irClass.thisReceiver = context.symbolTable.declareValueParameter(
+            irClass.thisReceiver = context.symbolTable.descriptorExtension.declareValueParameter(
                 startOffset, endOffset,
                 IrDeclarationOrigin.INSTANCE_RECEIVER,
                 classDescriptor.thisAsReceiverParameter,
@@ -66,14 +63,14 @@ open class FragmentDeclarationGenerator(
             startOffset = UNDEFINED_OFFSET,
             endOffset = UNDEFINED_OFFSET,
             origin = IrDeclarationOrigin.DEFINED,
-            symbol = IrConstructorPublicSymbolImpl(context.symbolTable.signaturer.composeSignature(irClass.descriptor)!!),
-            Name.special("<init>"),
-            irClass.visibility,
-            irClass.defaultType,
+            name = Name.special("<init>"),
+            visibility = irClass.visibility,
             isInline = false,
-            isExternal = false,
+            isExpect = false,
+            returnType = irClass.defaultType,
+            symbol = IrConstructorPublicSymbolImpl(context.symbolTable.signaturer.composeSignature(irClass.descriptor)!!),
             isPrimary = true,
-            isExpect = false
+            isExternal = false
         )
         constructor.parent = irClass
         constructor.body = context.irFactory.createBlockBody(UNDEFINED_OFFSET, UNDEFINED_OFFSET).apply {
@@ -88,7 +85,7 @@ open class FragmentDeclarationGenerator(
         return IrDelegatingConstructorCallImpl.fromSymbolDescriptor(
             UNDEFINED_OFFSET, UNDEFINED_OFFSET,
             context.irBuiltIns.unitType,
-            context.symbolTable.referenceConstructor(anyConstructor)
+            context.symbolTable.descriptorExtension.referenceConstructor(anyConstructor)
         )
     }
 
@@ -132,14 +129,14 @@ open class FragmentDeclarationGenerator(
         // of IR generation. The replacement is delayed because the JVM
         // specific infrastructure (i.e. "SharedVariableContext") is not yet
         // instantiated: PSI2IR is kept backend agnostic.
-        return context.symbolTable.declareValueParameter(
+        return context.symbolTable.descriptorExtension.declareValueParameter(
             UNDEFINED_OFFSET,
             UNDEFINED_OFFSET,
             if (shouldPromoteToSharedVariable(parameterInfo)) IrDeclarationOrigin.SHARED_VARIABLE_IN_EVALUATOR_FRAGMENT else IrDeclarationOrigin.DEFINED,
             descriptor,
             descriptor.type.toIrType(),
             descriptor.varargElementType?.toIrType(),
-            null,
+            name = null,
             isAssignable = parameterInfo.isLValue
         )
     }

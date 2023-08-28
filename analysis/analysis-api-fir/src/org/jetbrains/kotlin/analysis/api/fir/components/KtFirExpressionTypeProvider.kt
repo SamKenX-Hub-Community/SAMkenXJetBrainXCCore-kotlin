@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2023 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -8,15 +8,14 @@ package org.jetbrains.kotlin.analysis.api.fir.components
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.analysis.api.components.KtExpressionTypeProvider
 import org.jetbrains.kotlin.analysis.api.fir.KtFirAnalysisSession
-import org.jetbrains.kotlin.analysis.api.fir.utils.getReferencedElementType
 import org.jetbrains.kotlin.analysis.api.fir.utils.unwrap
 import org.jetbrains.kotlin.analysis.api.lifetime.KtLifetimeToken
 import org.jetbrains.kotlin.analysis.api.types.KtErrorType
 import org.jetbrains.kotlin.analysis.api.types.KtFunctionalType
 import org.jetbrains.kotlin.analysis.api.types.KtType
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.getOrBuildFir
-import org.jetbrains.kotlin.analysis.low.level.api.fir.api.getOrBuildFirOfType
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.getOrBuildFirSafe
+import org.jetbrains.kotlin.analysis.low.level.api.fir.api.resolveToFirSymbol
 import org.jetbrains.kotlin.analysis.utils.errors.unexpectedElementError
 import org.jetbrains.kotlin.fir.*
 import org.jetbrains.kotlin.fir.declarations.*
@@ -28,12 +27,14 @@ import org.jetbrains.kotlin.fir.resolve.constructFunctionType
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
 import org.jetbrains.kotlin.fir.symbols.impl.FirClassSymbol
 import org.jetbrains.kotlin.fir.types.*
+import org.jetbrains.kotlin.fir.utils.exceptions.withFirEntry
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.getOutermostParenthesizerOrThis
 import org.jetbrains.kotlin.utils.addToStdlib.applyIf
-import kotlin.contracts.ExperimentalContracts
-import kotlin.contracts.contract
+import org.jetbrains.kotlin.utils.exceptions.rethrowExceptionWithDetails
+import org.jetbrains.kotlin.utils.exceptions.withPsiEntry
 
 internal class KtFirExpressionTypeProvider(
     override val analysisSession: KtFirAnalysisSession,
@@ -41,63 +42,112 @@ internal class KtFirExpressionTypeProvider(
 ) : KtExpressionTypeProvider(), KtFirAnalysisSessionComponent {
 
     override fun getKtExpressionType(expression: KtExpression): KtType? {
-        return when (val fir = expression.unwrap().getOrBuildFir(firResolveSession)) {
-            is FirFunctionCall -> {
-                getReturnTypeForArrayStyleAssignmentTarget(expression, fir)
-                    ?: fir.typeRef.coneType.asKtType()
+        // There are various cases where we have no corresponding fir due to invalid code
+        // Some examples:
+        // ```
+        // when {
+        //   true, false -> {}
+        // }
+        // ```
+        // `false` does not have a corresponding elements on the FIR side and hence the containing `FirWhenBranch` is returned.
+        // ```
+        // @Volatile
+        // private var
+        // ```
+        // Volatile does not have corresponding element, so `FirFileImpl` is returned
+        val fir = expression.unwrap().getOrBuildFir(firResolveSession) ?: return null
+        return try {
+            getKtExpressionType(expression, fir)
+        } catch (e: Exception) {
+            rethrowExceptionWithDetails("Exception during resolving ${expression::class.simpleName}", e) {
+                withPsiEntry("expression", expression)
+                withFirEntry("fir", fir)
             }
-            is FirPropertyAccessExpression -> {
-                // For unresolved `super`, we manually create an intersection type so that IDE features like completion can work correctly.
-                val containingClass =
-                    (fir.dispatchReceiver as? FirThisReceiverExpression)?.calleeReference?.boundSymbol as? FirClassSymbol<*>
-                if (fir.calleeReference is FirSuperReference && fir.typeRef is FirErrorTypeRef && containingClass != null) {
-                    val superTypes = containingClass.resolvedSuperTypes
-                    when (superTypes.size) {
-                        0 -> analysisSession.builtinTypes.ANY
-                        1 -> superTypes.single().asKtType()
-                        else -> ConeIntersectionType(superTypes).asKtType()
-                    }
-                } else {
-                    fir.typeRef.coneType.asKtType()
-                }
-            }
-            is FirVariableAssignment -> {
-                if (fir.lValue.source?.psi == expression) {
-                    fir.lValue.typeRef.coneType.asKtType()
-                } else if (expression is KtUnaryExpression && expression.operationToken in KtTokens.INCREMENT_AND_DECREMENT) {
-                    fir.rValue.typeRef.coneType.asKtType()
-                } else {
-                    analysisSession.builtinTypes.UNIT
-                }
-            }
-            is FirExpression -> fir.typeRef.coneType.asKtType()
-            is FirNamedReference -> fir.getReferencedElementType().asKtType()
-            is FirStatement -> with(analysisSession) { builtinTypes.UNIT }
-            is FirTypeRef, is FirImport, is FirPackageDirective, is FirLabel, is FirTypeParameterRef -> null
+        }
+    }
 
-            // `listOf<_>(1)` where `expression` is `_`
-            is FirPlaceholderProjection -> null
+    private fun getKtExpressionType(expression: KtExpression, fir: FirElement): KtType? = when (fir) {
+        is FirFunctionCall -> getReturnTypeForArrayStyleAssignmentTarget(expression, fir) ?: fir.resolvedType.asKtType()
+        is FirPropertyAccessExpression -> {
+            // For unresolved `super`, we manually create an intersection type so that IDE features like completion can work correctly.
+            val containingClass = (fir.dispatchReceiver as? FirThisReceiverExpression)?.calleeReference?.boundSymbol as? FirClassSymbol<*>
 
-            // There are various cases where we have no corresponding fir due to invalid code
-            // Some examples:
-            // ```
-            // when {
-            //   true, false -> {}
-            // }
-            // ```
-            // `false` does not have a corresponding elements on the FIR side and hence the containing `FirWhenBranch` is returned.
-            // ```
-            // @Volatile
-            // private var
-            // ```
-            // Volatile does not have corresponding element, so `FirFileImpl` is returned
+            if (fir.calleeReference is FirSuperReference && fir.coneTypeOrNull is ConeErrorType && containingClass != null) {
+                val superTypes = containingClass.resolvedSuperTypes
+                when (superTypes.size) {
+                    0 -> analysisSession.builtinTypes.ANY
+                    1 -> superTypes.single().asKtType()
+                    else -> ConeIntersectionType(superTypes).asKtType()
+                }
+            } else {
+                fir.resolvedType.asKtType()
+            }
+        }
+        is FirVariableAssignment -> {
+            if (fir.lValue.source?.psi == expression) {
+                fir.lValue.resolvedType.asKtType()
+            } else if (expression is KtUnaryExpression && expression.operationToken in KtTokens.INCREMENT_AND_DECREMENT) {
+                fir.rValue.resolvedType.asKtType()
+            } else {
+                analysisSession.builtinTypes.UNIT
+            }
+        }
+        is FirExpression -> fir.resolvedType.asKtType()
+        is FirNamedReference -> fir.getCorrespondingTypeIfPossible()?.asKtType()
+        is FirStatement -> with(analysisSession) { builtinTypes.UNIT }
+        is FirTypeRef, is FirImport, is FirPackageDirective, is FirLabel, is FirTypeParameterRef -> null
+
+        // `listOf<_>(1)` where `expression` is `_`
+        is FirPlaceholderProjection -> null
+        else -> null
+    }
+
+    /**
+     * It only makes sense to provide type for the references which reference some actual properties/variables.
+     *
+     * In cases when the name reference references a function (a REAL function, not a functional type variable), it does not
+     * make sense to provide any type for it.
+     *
+     * ---
+     *
+     * Why not just always provide null for name references? In such case, the following case would be a problem:
+     *
+     * ```kt
+     * fun usage(action: String.(Int) -> String) {
+     *   "hello".<expr>action</expr>(10)
+     * }
+     * ```
+     *
+     * The user might want to know the type of the `action` callback. If we always return null for the named references,
+     * we won't be able to handle this request, and just return null. So the user will only be able to see the type
+     * of the whole expression instead, and that is not what he wants.
+     */
+    private fun FirNamedReference.getCorrespondingTypeIfPossible(): ConeKotlinType? =
+        findOuterPropertyAccessExpression()?.resolvedType
+
+    /**
+     * Finds an outer expression for [this] named reference in cases when it is a part of a property access.
+     *
+     * Otherwise, return null.
+     */
+    private fun FirNamedReference.findOuterPropertyAccessExpression(): FirExpression? {
+        val referenceExpression = psi as? KtExpression ?: return null
+        val outerExpression = referenceExpression.getOutermostParenthesizerOrThis().parent as? KtElement ?: return null
+
+        return when (val outerFirElement = outerExpression.getOrBuildFir(firResolveSession)) {
+            is FirVariableAssignment -> outerFirElement.lValue
+            is FirPropertyAccessExpression -> outerFirElement
+            is FirImplicitInvokeCall -> outerFirElement.explicitReceiver
+            is FirSafeCallExpression -> {
+                if (outerFirElement.selector is FirPropertyAccessExpression) outerFirElement else null
+            }
             else -> null
         }
     }
 
     private fun getReturnTypeForArrayStyleAssignmentTarget(
         expression: KtExpression,
-        fir: FirFunctionCall
+        fir: FirFunctionCall,
     ): KtType? {
         if (fir.calleeReference !is FirResolvedNamedReference) return null
         if (expression !is KtArrayAccessExpression) return null
@@ -110,45 +160,35 @@ internal class KtFirExpressionTypeProvider(
 
     private data class SubstitutedValueParameter(val parameter: FirValueParameter, val substitutedType: ConeKotlinType)
 
-    private fun FirFunctionCall.argumentsToSubstitutedValueParameters(
-        substituteWithErrorTypes: Boolean = true
+    private fun FirCall.argumentsToSubstitutedValueParameters(
+        substituteWithErrorTypes: Boolean = true,
     ): LinkedHashMap<FirExpression, SubstitutedValueParameter>? {
-        val substitutor = createConeSubstitutorFromTypeArguments(discardErrorTypes = !substituteWithErrorTypes) ?: ConeSubstitutor.Empty
+        val substitutor = (this as? FirQualifiedAccessExpression)
+            ?.createConeSubstitutorFromTypeArguments(discardErrorTypes = !substituteWithErrorTypes)
+            ?: ConeSubstitutor.Empty
+
         return resolvedArgumentMapping?.mapValuesTo(LinkedHashMap()) { (_, parameter) ->
             SubstitutedValueParameter(parameter, substitutor.substituteOrSelf(parameter.returnTypeRef.coneType))
         }
     }
 
     override fun getReturnTypeForKtDeclaration(declaration: KtDeclaration): KtType {
-        val firDeclaration = if (isAnonymousFunction(declaration))
-            declaration.toFirAnonymousFunction()
-        else
+        val firDeclaration = if (declaration is KtParameter && declaration.ownerFunction == null) {
             declaration.getOrBuildFir(firResolveSession)
+        } else {
+            declaration.resolveToFirSymbol(firResolveSession, FirResolvePhase.TYPES).fir
+        }
         return when (firDeclaration) {
-            is FirCallableDeclaration -> firDeclaration.returnTypeRef.coneType.asKtType()
+            is FirCallableDeclaration -> firDeclaration.symbol.resolvedReturnType.asKtType()
             is FirFunctionTypeParameter -> firDeclaration.returnTypeRef.coneType.asKtType()
             else -> unexpectedElementError<FirElement>(firDeclaration)
         }
     }
 
     override fun getFunctionalTypeForKtFunction(declaration: KtFunction): KtType {
-        val firFunction = if (isAnonymousFunction(declaration))
-            declaration.toFirAnonymousFunction()
-        else
-            declaration.getOrBuildFirOfType<FirFunction>(firResolveSession)
+        val firFunction = declaration.resolveToFirSymbol(firResolveSession, FirResolvePhase.TYPES).fir as FirFunction
+        firFunction.symbol.calculateReturnType()
         return firFunction.constructFunctionType(firFunction.specialFunctionTypeKind(firResolveSession.useSiteFirSession)).asKtType()
-    }
-
-    @OptIn(ExperimentalContracts::class)
-    private fun isAnonymousFunction(ktDeclaration: KtDeclaration): Boolean {
-        contract {
-            returns(true) implies (ktDeclaration is KtNamedFunction)
-        }
-        return ktDeclaration is KtNamedFunction && ktDeclaration.isAnonymous
-    }
-
-    private fun KtFunction.toFirAnonymousFunction(): FirAnonymousFunction {
-        return getOrBuildFirOfType<FirAnonymousFunctionExpression>(firResolveSession).anonymousFunction
     }
 
     override fun getExpectedType(expression: PsiElement): KtType? {
@@ -174,14 +214,12 @@ internal class KtFirExpressionTypeProvider(
     private fun getExpectedTypeByTypeCast(expression: PsiElement): KtType? {
         val typeCastExpression =
             expression.unwrapQualified<KtBinaryExpressionWithTypeRHS> { castExpr, expr -> castExpr.left == expr } ?: return null
-        with(analysisSession) {
-            return typeCastExpression.right?.getKtType()
-        }
+        return getKtExpressionType(typeCastExpression)
     }
 
     private fun getExpectedTypeOfFunctionParameter(expression: PsiElement): KtType? {
-        val (ktCallExpression, argumentExpression) = expression.getFunctionCallAsWithThisAsParameter() ?: return null
-        val firCall = ktCallExpression.getOrBuildFirSafe<FirFunctionCall>(firResolveSession) ?: return null
+        val (ktCallElement, argumentExpression) = expression.getFunctionCallAsWithThisAsParameter() ?: return null
+        val firCall = ktCallElement.getOrBuildFirSafe<FirCall>(firResolveSession) ?: return null
 
         val callee = (firCall.calleeReference as? FirResolvedNamedReference)?.resolvedSymbol
         if (callee?.fir?.origin == FirDeclarationOrigin.SamConstructor) {
@@ -231,8 +269,8 @@ internal class KtFirExpressionTypeProvider(
             valueArg.getArgumentExpression()?.unwrap() == expr
         } ?: return null
         val callExpression =
-            (valueArgument.parent as? KtValueArgumentList)?.parent as? KtCallExpression
-                ?: valueArgument.parent as? KtCallExpression // KtLambdaArgument
+            (valueArgument.parent as? KtValueArgumentList)?.parent as? KtCallElement
+                ?: valueArgument.parent as? KtCallElement // KtLambdaArgument
                 ?: return null
         val argumentExpression = valueArgument.getArgumentExpression() ?: return null
         return KtCallWithArgument(callExpression, argumentExpression)
@@ -245,7 +283,7 @@ internal class KtFirExpressionTypeProvider(
 
         // There is only one parameter for infix functions; get its type
         val argumentsToParameters = firCall.argumentsToSubstitutedValueParameters(substituteWithErrorTypes = false) ?: return null
-        return argumentsToParameters.values.singleOrNull()?.substitutedType?.asKtType() ?: return null
+        return argumentsToParameters.values.singleOrNull()?.substitutedType?.asKtType()
     }
 
     private fun getExpectedTypeByReturnExpression(expression: PsiElement): KtType? {
@@ -387,7 +425,7 @@ internal class KtFirExpressionTypeProvider(
 
     private fun getDefiniteNullability(expression: KtExpression): DefiniteNullability {
         fun FirExpression.isNotNullable() = with(analysisSession.useSiteSession.typeContext) {
-            !typeRef.coneType.isNullableType()
+            !resolvedType.isNullableType()
         }
 
         when (val fir = expression.getOrBuildFir(analysisSession.firResolveSession)) {
@@ -407,7 +445,7 @@ internal class KtFirExpressionTypeProvider(
     }
 }
 
-private data class KtCallWithArgument(val call: KtCallExpression, val argument: KtExpression)
+private data class KtCallWithArgument(val call: KtCallElement, val argument: KtExpression)
 
 private inline fun <reified R : Any> PsiElement.unwrapQualified(check: (R, PsiElement) -> Boolean): R? {
     val parent = nonContainerParent

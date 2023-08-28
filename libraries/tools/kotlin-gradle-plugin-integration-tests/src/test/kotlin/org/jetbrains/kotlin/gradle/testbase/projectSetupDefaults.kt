@@ -25,7 +25,6 @@ internal val DEFAULT_GROOVY_SETTINGS_FILE =
             id "org.jetbrains.kotlin.js" version "${'$'}kotlin_version"
             id "org.jetbrains.kotlin.native.cocoapods" version "${'$'}kotlin_version"
             id "org.jetbrains.kotlin.multiplatform" version "${'$'}kotlin_version"
-            id "org.jetbrains.kotlin.multiplatform.pm20" version "${'$'}kotlin_version"
             id "org.jetbrains.kotlin.plugin.allopen" version "${'$'}kotlin_version"
             id "org.jetbrains.kotlin.plugin.spring" version "${'$'}kotlin_version"
             id "org.jetbrains.kotlin.plugin.jpa" version "${'$'}kotlin_version"
@@ -86,7 +85,6 @@ internal val DEFAULT_KOTLIN_SETTINGS_FILE =
             id("org.jetbrains.kotlin.js") version kotlin_version
             id("org.jetbrains.kotlin.native.cocoapods") version kotlin_version
             id("org.jetbrains.kotlin.multiplatform") version kotlin_version
-            id("org.jetbrains.kotlin.multiplatform.pm20") version kotlin_version
             id("org.jetbrains.kotlin.plugin.allopen") version kotlin_version
             id("org.jetbrains.kotlin.plugin.spring") version kotlin_version
             id("org.jetbrains.kotlin.plugin.jpa") version kotlin_version
@@ -113,7 +111,9 @@ internal val DEFAULT_KOTLIN_SETTINGS_FILE =
                     "com.android.asset-pack-bundle",
                     "com.android.lint",
                     "com.android.instantapp",
-                    "com.android.feature" -> useModule("com.android.tools.build:gradle:${'$'}android_tools_version")
+                    "com.android.feature",
+                    "com.android.kotlin.multiplatform.library"
+                       -> useModule("com.android.tools.build:gradle:${'$'}android_tools_version")
                 }
             }
         }
